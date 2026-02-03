@@ -1,6 +1,0 @@
-fastapi
-uvicorn
-pytest
-numpy
-scikit-learn
-httpx

@@ -1,0 +1,23 @@
+artifact_path: file:///C:/Users/alisa.novikova/DEV/HW2/mlruns/1/models/m-94bdbafa6aae42eda561dee6b0624f4e/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.11.0
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.8.0
+    skops_trusted_types: null
+mlflow_version: 3.9.0
+model_id: m-94bdbafa6aae42eda561dee6b0624f4e
+model_size_bytes: 736
+model_uuid: m-94bdbafa6aae42eda561dee6b0624f4e
+prompts: null
+run_id: 6d03fc3c821e4756a765ffc4b8945500
+utc_time_created: '2026-02-03 22:14:34.498275'

@@ -1,35 +1,43 @@
 from contextlib import asynccontextmanager
-import logging
-from fastapi import FastAPI, HTTPException, status, Depends
+from typing import Dict, AsyncGenerator, Any
+from fastapi import FastAPI, Depends, HTTPException
 from model import load_model
-from services.advertisement import AdvertisementMLService
-from routers.advertisement import router
+import os
+from services.services_advertisement import AdvertisementMLService
+from routers.routers_advertisement import router
 import uvicorn
+import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    use_mlflow = os.getenv("USE_MLFLOW", "false").lower() == "true"
+    ml_service = AdvertisementMLService(is_use_mlflow=use_mlflow)
+    app.state.ml_service = ml_service
     try:
-        app.state.ml_service = AdvertisementMLService()
-        app.state.ml_service._load_model()  # Test load
-        logger.info("Service started with ML model")
+        ml_service._load_model()
+        logger.info("Service started with ML model successfully loaded")
     except Exception as e:
-        logger.error("Model init failed: %s", e)
+        logger.error(f"Model init failed: {e}")
     yield
 
-app = FastAPI(title="Ad Moderation ML API", lifespan=lifespan)
 
-@app.get("/")
-async def root():
-    return {"message": "Ad Moderation ML API"}
+app = FastAPI(title="Ad Moderation ML API", version="1.0.0", lifespan=lifespan)
 
-@app.get("/health")
-async def health(ml_service: AdvertisementMLService = Depends(lambda: app.state.ml_service)):
-    return {"status": "healthy"}
+@app.get("/", tags=["info"])
+async def root() -> Dict[str, str]:
+    return {"message": "Advertisement Moderation ML API"}
 
-app.include_router(router)
+@app.get("/health", tags=["health"])
+async def health(ml_service: AdvertisementMLService = Depends(lambda: app.state.ml_service)) -> Dict[str, str]:
+    if ml_service._model is None:
+        raise HTTPException(status_code=503, detail="Model is not available")
+    return {"status": "healthy", "model": "ready"}
+
+app.include_router(router, prefix="/advertisement", tags=["prediction"])
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8007)

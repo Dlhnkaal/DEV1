@@ -1,8 +1,11 @@
 fastapi
 uvicorn
 uvicorn[standard]
+asyncpg
 pytest
 pydantic
+psycopg2-binary
+yandex-pgmigrate
 fastapi[standard]
 pytest-asyncio
 httpx
