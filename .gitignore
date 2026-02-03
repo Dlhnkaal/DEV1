@@ -1,0 +1,12 @@
+# virtual environments
+banana/
+venv/
+.venv/
+
+# python cache
+__pycache__/
+.pytest_cache/
+
+# ide
+.vscode/
+.idea/
