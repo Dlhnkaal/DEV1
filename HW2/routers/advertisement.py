@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, Field
 from models.advertisement import AdvModel
-from services.services_advertisement import AdvertisementMLService
+from HW2.services.advertisement import AdvertisementMLService
 
 class PredictionMLResponse(BaseModel):
     is_violation: bool

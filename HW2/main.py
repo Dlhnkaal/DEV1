@@ -3,8 +3,8 @@ from typing import Dict, AsyncGenerator, Any
 from fastapi import FastAPI, Depends, HTTPException
 from model import load_model
 import os
-from services.services_advertisement import AdvertisementMLService
-from routers.routers_advertisement import router
+from HW2.services.advertisement import AdvertisementMLService
+from HW2.routers.advertisement import router
 import uvicorn
 import logging
 

@@ -7,8 +7,4 @@ mlflow.set_experiment("moderation-model")
 
 with mlflow.start_run():
     model = train_model()
-    log_model(
-        model,
-        artifact_path="model",
-        registered_model_name="moderation-model",
-    )
+    log_model(model, artifact_path="model", registered_model_name="moderation-model")
