@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
 from typing import Dict, AsyncGenerator
 from fastapi import FastAPI, Depends
-import os
 from services.advertisement import AdvertisementMLService
 from routers.advertisement import router, require_model_ready
+import sys
+import os
+from main import app
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import uvicorn
 import logging
 
