@@ -10,7 +10,6 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     use_mlflow = os.getenv("USE_MLFLOW", "false").lower() == "true"
@@ -22,7 +21,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.error(f"Model init failed: {e}")
     yield
-
 
 app = FastAPI(title="Ad Moderation ML API", version="1.0.0", lifespan=lifespan)
 

@@ -1,14 +1,14 @@
 fastapi
 uvicorn
 uvicorn[standard]
-asyncpg
 pytest
 pydantic
-psycopg2-binary
-yandex-pgmigrate
 fastapi[standard]
 pytest-asyncio
 httpx
 scikit-learn
 numpy
 mlflow
+yandex-pgmigrate
+psycopg2-binary
+asyncpg

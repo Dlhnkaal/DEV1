@@ -10,8 +10,10 @@ from main import app
     [({"seller_id": 1, "is_verified_seller": True, "item_id": 1, "name": "Safe Item", "description": "Good desc", "category": 1, "images_qty": 5}, False),
      ({"seller_id": 1, "is_verified_seller": False, "item_id": 1, "name": "Bad Item", "description": "Spam", "category": 1, "images_qty": 0}, True)])
 def test_predict_logic(app_client: TestClient, input_data: Dict[str, Any], expected_violation: bool) -> None:
-    mock_proba = np.array([[0.1, 0.9]]) if expected_violation else np.array([[0.9, 0.1]])
-    app_client.app.state.ml_service._model.predict_proba.return_value = mock_proba
+    if expected_violation:
+        app_client.app.state.ml_service.predict_ml.return_value = (True, 0.9)
+    else:
+        app_client.app.state.ml_service.predict_ml.return_value = (False, 0.1)
 
     response = app_client.post("/advertisement/predict", json=input_data)
     assert response.status_code == HTTPStatus.OK
@@ -85,7 +87,8 @@ def test_model_unavailable_503(app_client: TestClient) -> None:
     valid_data = {
         "seller_id": 1, "is_verified_seller": True, "item_id": 1,
         "name": "Test", "description": "Test", "category": 1, "images_qty": 5}
-    app_client.app.state.ml_service._model = None
+
+    app_client.app.state.ml_service.is_model_ready.return_value = False
     
     response = app_client.post("/advertisement/predict", json=valid_data)
     
@@ -94,8 +97,8 @@ def test_model_unavailable_503(app_client: TestClient) -> None:
 
 def test_prediction_internal_error_500(app_client: TestClient) -> None:
     valid_data = {"seller_id": 1, "is_verified_seller": True, "item_id": 1, "name": "Test", "description": "Test", "category": 1, "images_qty": 5}
-    
-    app_client.app.state.ml_service._model.predict_proba.side_effect = ValueError("Corrupted tensor shape")
+
+    app_client.app.state.ml_service.predict_ml.side_effect = ValueError("Corrupted tensor shape")
     
     response = app_client.post("/advertisement/predict", json=valid_data)
     assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR

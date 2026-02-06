@@ -10,8 +10,10 @@ from main import app
     [({"seller_id":1, "is_verified_seller":False, "item_id":1, "name":"Test", "description":"a"*10, "category":0, "images_qty":0}, True),
      ({"seller_id":1, "is_verified_seller":True, "item_id":1, "name":"Test", "description":"OK", "category":50, "images_qty":5}, False)])
 def test_predict_ml_success(app_client: TestClient, data: Dict[str, Any], expected_violation: bool):
-    mock_proba = np.array([[0.4, 0.6]]) if expected_violation else np.array([[0.7, 0.3]])
-    app_client.app.state.ml_service._model.predict_proba.return_value = mock_proba
+    if expected_violation:
+        app_client.app.state.ml_service.predict_ml.return_value = (True, 0.6)
+    else:
+        app_client.app.state.ml_service.predict_ml.return_value = (False, 0.3)
     
     resp = app_client.post("/advertisement/predict", json=data)
     assert resp.status_code == HTTPStatus.OK
@@ -25,7 +27,7 @@ def test_invalid_data(app_client: TestClient) -> None:
     assert resp.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
 
 def test_model_unavailable(app_client: TestClient) -> None:
-    app_client.app.state.ml_service._model = None
+    app_client.app.state.ml_service.is_model_ready.return_value = False
     
     data={"seller_id":1,"is_verified_seller":False,"item_id":1,"name":"Test","description":"test","category":0,"images_qty":0}
     resp = app_client.post("/advertisement/predict", json=data)

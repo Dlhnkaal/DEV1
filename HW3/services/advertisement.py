@@ -3,12 +3,13 @@ import numpy as np
 import os
 from typing import Optional, Tuple
 from dataclasses import dataclass, field
-from models.advertisement import AdvModel
-from model import load_model, load_mlflow_model
+from models.advertisement import AdvModel, SimplePredictRequest
+from ml.model import load_model, load_mlflow_model
 from sklearn.linear_model import LogisticRegression
+from repositories.advertisement import AdvertisementRepository
+from errors import AdvertisementNotFoundError, ModelNotReadyError
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class AdvertisementMLService:
@@ -16,13 +17,14 @@ class AdvertisementMLService:
     _model: Optional[LogisticRegression] = None
     is_use_mlflow: bool = False
     _model_loaded: bool = field(default=False, init=False)
+    advertisement_repo: AdvertisementRepository = field(default_factory=AdvertisementRepository)
 
     def _get_model(self) -> LogisticRegression:
         if self._model is None:
             self._load_model()
 
         if self._model is None:
-            raise RuntimeError("Model is not initialized and could not be loaded")
+            raise ModelNotReadyError("Model is not initialized and could not be loaded")
 
         return self._model
 
@@ -43,7 +45,7 @@ class AdvertisementMLService:
                     logger.warning(f"Model file {self.model_path} not found, train new model")
                     
                     try:
-                        from model import train_model, save_model
+                        from ml.model import train_model, save_model
                     except ImportError as e:
                         logger.error(f"Cannot import train_model: {e}")
                         raise RuntimeError(f"Cannot train model: {e}")
@@ -92,4 +94,21 @@ class AdvertisementMLService:
 
         except Exception as e:
             logger.error(f"Prediction calculation failed: {e}")
+            raise e
+
+    async def simple_predict(self, item_id: int) -> Tuple[bool, float]:
+        try:
+            advertisement = await self.advertisement_repo.get_by_id(item_id)
+            
+            logger.info(f"Simple predict for item_id={item_id}, "
+                       f"seller_id={advertisement.seller_id}, "
+                       f"is_verified={advertisement.is_verified_seller}")
+            
+            return self.predict_ml(advertisement)
+            
+        except AdvertisementNotFoundError as e:
+            logger.error(f"Advertisement not found: {e}")
+            raise e
+        except Exception as e:
+            logger.error(f"Simple prediction failed: {e}")
             raise e

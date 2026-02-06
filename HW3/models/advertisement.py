@@ -1,10 +1,29 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from datetime import datetime
+from typing import Optional
 
-class AdvModel(BaseModel):
+class AdvertisementBase(BaseModel):
     seller_id: int = Field(gt=0)
-    is_verified_seller: bool
-    item_id: int = Field(gt=0)
     name: str = Field(min_length=1, max_length=100)
     description: str = Field(min_length=1, max_length=1000)
-    category: int = Field(ge=0) 
-    images_qty: int = Field(ge=0)
+    category: int = Field(ge=0, le=100)
+    images_qty: int = Field(ge=0, le=10)
+
+class AdvertisementCreate(AdvertisementBase):
+    pass
+
+class AdvertisementInDB(AdvertisementBase):
+    id: int = Field()
+    created_at: datetime = Field()
+    updated_at: datetime = Field()
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class AdvModel(AdvertisementBase):
+    id: int = Field(gt=0)
+    is_verified_seller: bool = Field()
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class SimplePredictRequest(BaseModel):
+    item_id: int = Field(gt=0)
