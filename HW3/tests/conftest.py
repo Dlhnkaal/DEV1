@@ -38,7 +38,7 @@ def mock_ml_service_predict_only():
 @pytest.fixture
 def app_predict_only(mock_ml_service_predict_only):
     app = FastAPI()
-    app.include_router(advertisement_router, prefix="/advertisement", tags=["prediction"])
+    app.include_router(advertisement_router, prefix="/advertisement")
     app.state.ml_service = mock_ml_service_predict_only
     return app
 
