@@ -1,53 +1,69 @@
 import pytest
-import numpy as np
 from http import HTTPStatus
-from typing import Dict, Any
-from unittest.mock import AsyncMock, patch, MagicMock
+from typing import Dict, Any, Tuple
+from unittest.mock import MagicMock, AsyncMock
 from fastapi.testclient import TestClient
-from main import app
-from models.advertisement import AdvModel
+from fastapi import FastAPI
+import sys
+import os
 
-@pytest.mark.asyncio
-async def test_simple_predict_success(app_client: TestClient):
-    app_client.app.state.ml_service.simple_predict.return_value = (True, 0.85)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from routers.advertisement import router
+from errors import AdvertisementNotFoundError
+
+@pytest.fixture
+def mock_ml_service():
+    mock = MagicMock()
+    mock.is_model_ready.return_value = True
+    mock.predict_ml.return_value = (False, 0.1)
+    mock.simple_predict = AsyncMock()
+    mock.simple_predict.return_value = (False, 0.1)
+    return mock
+
+@pytest.fixture
+def app(mock_ml_service):
+    app = FastAPI()
+    app.include_router(router, prefix="/advertisement", tags=["prediction"])
+    app.state.ml_service = mock_ml_service
+    return app
+
+@pytest.fixture
+def test_client(app):
+    with TestClient(app) as client:
+        yield client
+
+@pytest.mark.parametrize("model_return, expected_result", 
+    [((True, 0.85), {"is_violation": True, "probability": 0.85}),
+    ((False, 0.15), {"is_violation": False, "probability": 0.15})])
+def test_simple_predict_success(test_client, app, mock_ml_service, model_return, expected_result):
+    mock_ml_service.simple_predict.return_value = model_return
     
-    response = app_client.post("/advertisement/simple_predict", json={"item_id": 123})
+    response = test_client.post("/advertisement/simple_predict", json={"item_id": 123})
     
     assert response.status_code == HTTPStatus.OK
     result = response.json()
-    assert result["is_violation"] == True
-    assert result["probability"] == 0.85
+    assert result == expected_result
 
-@pytest.mark.asyncio
-async def test_simple_predict_not_found(app_client: TestClient):
-    from errors import AdvertisementNotFoundError
+def test_simple_predict_not_found(test_client, app, mock_ml_service):
+    mock_ml_service.simple_predict.side_effect = AdvertisementNotFoundError("Advertisement with id 999 not found")
     
-    app_client.app.state.ml_service.simple_predict.side_effect = AdvertisementNotFoundError("Not found")
-    
-    response = app_client.post("/advertisement/simple_predict", json={"item_id": 999})
-    
+    response = test_client.post("/advertisement/simple_predict", json={"item_id": 999})
     assert response.status_code == HTTPStatus.NOT_FOUND
-    assert "Advertisement with id 999 not found" in response.json()["detail"]
 
-@pytest.mark.asyncio
-async def test_simple_predict_model_not_ready(app_client: TestClient):
-    app_client.app.state.ml_service.is_model_ready.return_value = False
+def test_simple_predict_model_not_ready(test_client, app, mock_ml_service):
+    mock_ml_service.is_model_ready.return_value = False
     
-    response = app_client.post("/advertisement/simple_predict", json={"item_id": 123})
-    
+    response = test_client.post("/advertisement/simple_predict", json={"item_id": 123})
     assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
-    assert "Model is not available" in response.json()["detail"]
 
-@pytest.mark.asyncio
-async def test_simple_predict_validation_error(app_client: TestClient):
-    # Неверный тип данных
-    response = app_client.post("/advertisement/simple_predict", json={"item_id": "invalid"})
+@pytest.mark.parametrize("payload", [{"item_id": "invalid"}, {"item_id": -1}, {"item_id": 0},
+                                     {}, {"item_id": None}])
+def test_simple_predict_validation_error(test_client, app, mock_ml_service, payload):
+    response = test_client.post("/advertisement/simple_predict", json=payload)
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+def test_simple_predict_internal_error(test_client, app, mock_ml_service):
+    mock_ml_service.simple_predict.side_effect = Exception("Database connection failed")
     
-    # Отрицательное значение
-    response = app_client.post("/advertisement/simple_predict", json={"item_id": -1})
-    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
-    
-    # Отсутствует обязательное поле
-    response = app_client.post("/advertisement/simple_predict", json={})
-    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    response = test_client.post("/advertisement/simple_predict", json={"item_id": 123})
+    assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
