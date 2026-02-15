@@ -1,5 +1,5 @@
 # Запуск всех сервисов
-./infra/starting_services.sh
+./infra/starting_services.sh ЛИБО ЖЕ docker-compose up -d --build
 
 # Создание топиков 
 ./infra/create_topics.sh
