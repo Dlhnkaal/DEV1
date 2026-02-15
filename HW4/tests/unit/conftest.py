@@ -2,11 +2,14 @@ import pytest
 from fastapi.testclient import TestClient
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from main import app
 from services.advertisement import AdvertisementMLService
 from repositories.advertisement import AdvertisementPostgresStorage, AdvertisementRepository
-from repositories.user import UserPostgresStorage, UserRepository
+from repositories.user import UserPostgresStorage
 
 
 @pytest.fixture

@@ -9,7 +9,6 @@ httpx
 scikit-learn
 numpy
 mlflow
-yandex-pgmigrate
 psycopg2-binary
 alembic
 asyncpg

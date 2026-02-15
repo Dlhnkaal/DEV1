@@ -3,17 +3,14 @@ from dataclasses import dataclass
 from typing import Mapping, Any, Sequence, List
 
 from clients.postgres import get_pg_connection
-from errors import AdvertisementNotFoundError
-from models.advertisement import AdvertisementWithUserBase, AdvertisementCreate, AdvertisementInDB, AdvertisementLite
+from models.advertisement import AdvertisementWithUserBase, AdvertisementInDB
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass(frozen=True)
 class AdvertisementPostgresStorage:
     async def create(self, seller_id: int, name: str, description: str, category: int, images_qty: int) -> Mapping[str, Any]:
-        logger.info(
-            "Creating advertisement for seller_id=%s, category=%s", seller_id, category)
+        logger.info("Creating advertisement for seller_id=%s, category=%s", seller_id, category)
         query = """
             INSERT INTO advertisements (seller_id, name, description, category, images_qty)
             VALUES ($1, $2, $3, $4, $5)
@@ -21,13 +18,11 @@ class AdvertisementPostgresStorage:
                       created_at, updated_at
         """
         async with get_pg_connection() as connection:
-            row = await connection.fetchrow(
-                query, seller_id, name, description, category, images_qty)
+            row = await connection.fetchrow(query, seller_id, name, description, category, images_qty)
             if row:
                 logger.info("Advertisement created successfully, id=%s", row["id"])
                 return dict(row)
-            logger.error("Failed to create advertisement - no row returned")
-            raise Exception("Failed to create advertisement")
+            return None
 
     async def get_by_id_with_user(self, item_id: int) -> Mapping[str, Any]:
         logger.info("Selecting advertisement with user info by id=%s", item_id)
@@ -45,7 +40,7 @@ class AdvertisementPostgresStorage:
             if row:
                 return dict(row)
             logger.warning("Advertisement not found, id=%s", item_id)
-            raise AdvertisementNotFoundError(f"Advertisement with id {item_id} not found")
+            return None
 
     async def get_all(self) -> Sequence[Mapping[str, Any]]:
         logger.info("Selecting all advertisements")
@@ -67,34 +62,34 @@ class AdvertisementPostgresStorage:
             if row:
                 logger.info("Advertisement deleted successfully, id=%s", item_id)
                 return dict(row)
-            return {} 
-
+            return {}
 
 @dataclass
 class AdvertisementRepository:
     storage: AdvertisementPostgresStorage = AdvertisementPostgresStorage()
 
-    async def create(self, ad_data: AdvertisementCreate) -> AdvertisementInDB:
-        logger.info("Repository: Creating advertisement with data %s", ad_data)
+    async def create(self, seller_id: int, name: str, description: str, category: int, images_qty: int) -> AdvertisementInDB:
+        logger.info("Repository: Creating advertisement for seller_id=%s, name=%s", seller_id, name)
         raw_ad = await self.storage.create(
-            seller_id=ad_data.seller_id,
-            name=ad_data.name,
-            description=ad_data.description,
-            category=ad_data.category,
-            images_qty=ad_data.images_qty)
-        return AdvertisementInDB(**raw_ad)
+            seller_id=seller_id,
+            name=name,
+            description=description,
+            category=category,
+            images_qty=images_qty
+        )
+        return AdvertisementInDB(**raw_ad) if raw_ad else None
 
-    async def get_by_id_with_user(self, item_id: AdvertisementLite) -> AdvertisementWithUserBase:
+    async def get_by_id_with_user(self, item_id: int) -> AdvertisementWithUserBase:
         logger.info("Repository: Getting advertisement by id=%s", item_id)
         raw_data = await self.storage.get_by_id_with_user(item_id)
-        return AdvertisementWithUserBase(**raw_data)
+        return AdvertisementWithUserBase(**raw_data) if raw_data else None
 
     async def get_all(self) -> List[AdvertisementInDB]:
         logger.info("Repository: Getting all advertisements")
         raw_ads = await self.storage.get_all()
         return [AdvertisementInDB(**row) for row in raw_ads]
 
-    async def delete(self, item_id: AdvertisementLite) -> bool:
+    async def delete(self, item_id: int) -> bool:
         logger.info("Repository: Deleting advertisement id=%s", item_id)
         res = await self.storage.delete(item_id)
         return bool(res)

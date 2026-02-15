@@ -4,11 +4,13 @@ import os
 from typing import Optional, Tuple
 from dataclasses import dataclass, field
 from models.advertisement import AdvertisementWithUserBase, AdvertisementLite
-from ml.model import load_model, load_mlflow_model
-from sklearn.linear_model import LogisticRegression
+
 from repositories.advertisement import AdvertisementRepository
 from repositories.user import UserRepository
 from errors import AdvertisementNotFoundError, ModelNotReadyError
+
+from ml.model import load_model, load_mlflow_model
+from sklearn.linear_model import LogisticRegression
 
 logger = logging.getLogger(__name__)
 
@@ -99,14 +101,14 @@ class AdvertisementMLService:
     async def simple_predict(self, adv: AdvertisementLite) -> Tuple[bool, float]:
         try:
             advertisement = await self.advertisement_repo.get_by_id_with_user(adv.item_id)
+
+            if advertisement is None:
+                raise AdvertisementNotFoundError(f"Advertisement with id {adv.item_id} not found")
             
             logger.info(f"Simple predict for item_id={adv.item_id}")
             
             return self.predict(advertisement)
             
-        except AdvertisementNotFoundError as e:
-            logger.error(f"Advertisement not found: {e}")
-            raise e
         except Exception as e:
             logger.error(f"Simple prediction failed: {e}")
             raise e

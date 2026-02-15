@@ -3,11 +3,9 @@ from dataclasses import dataclass
 from typing import Optional, List, Mapping, Any, Sequence
 
 from clients.postgres import get_pg_connection
-from errors import UserNotFoundError
-from models.user import UserCreate, UserInDB
+from models.user import UserInDB
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass(frozen=True)
 class UserPostgresStorage:
@@ -15,17 +13,14 @@ class UserPostgresStorage:
         logger.info("Creating user name=%s, email=%s", login, email)
         query = """
             INSERT INTO users (login, password, email, is_verified_seller)
-            VALUES ($1, $2, $3)
+            VALUES ($1, $2, $3, $4)
             RETURNING id, login, password, email, is_verified_seller, created_at, updated_at
         """
         async with get_pg_connection() as connection:
-            row = await connection.fetchrow(
-                query, login, email, is_verified_seller)
-            if row:
-                return dict(row)
-            raise Exception("Failed to create user")
+            row = await connection.fetchrow(query, login, password, email, is_verified_seller)
+            return dict(row) if row else None
 
-    async def get_by_id(self, user_id: int) -> Mapping[str, Any]:
+    async def get_by_id(self, user_id: int) -> Optional[Mapping[str, Any]]:
         logger.info("Selecting user by id=%s", user_id)
         query = """
             SELECT id, login, password, email, is_verified_seller, created_at, updated_at
@@ -36,7 +31,8 @@ class UserPostgresStorage:
             row = await connection.fetchrow(query, user_id)
             if row:
                 return dict(row)
-            raise UserNotFoundError(f"User with id {user_id} not found")
+            logger.warning("User not found, id=%s", user_id)
+            return None
 
     async def get_all(self) -> Sequence[Mapping[str, Any]]:
         logger.info("Selecting all users")
@@ -49,22 +45,22 @@ class UserPostgresStorage:
             rows = await connection.fetch(query)
             return [dict(row) for row in rows]
 
-
 @dataclass
 class UserRepository:
     storage: UserPostgresStorage = UserPostgresStorage()
 
-    async def create(self, user_data: UserCreate) -> UserInDB:
+    async def create(self, login: str, password: str, email: str, is_verified_seller: bool) -> UserInDB:
         raw_user = await self.storage.create(
-            login=user_data.login,
-            password=user_data.password,
-            email=user_data.email,
-            is_verified_seller=user_data.is_verified_seller)
-        return UserInDB(**raw_user)
+            login=login,
+            password=password,
+            email=email,
+            is_verified_seller=is_verified_seller
+        )
+        return UserInDB(**raw_user) if raw_user else None
 
-    async def get_by_id(self, user_id: int) -> UserInDB:
+    async def get_by_id(self, user_id: int) -> Optional[UserInDB]:
         raw_user = await self.storage.get_by_id(user_id)
-        return UserInDB(**raw_user)
+        return UserInDB(**raw_user) if raw_user else None
 
     async def get_all(self) -> List[UserInDB]:
         raw_users = await self.storage.get_all()

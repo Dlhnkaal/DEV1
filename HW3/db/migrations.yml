@@ -1,3 +1,0 @@
-conn: 'dbname=advertisement_db user=postgres host=localhost port=5432 password=123456'
-migration_table: migration
-migration_dir: migrations

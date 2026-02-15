@@ -4,5 +4,8 @@ class AdvertisementNotFoundError(Exception):
 class UserNotFoundError(Exception):
     pass
 
+class ModerationTaskNotFoundError(Exception):
+    pass
+
 class ModelNotReadyError(Exception):
     pass
