@@ -1,5 +1,8 @@
 import logging
+import logging
 from dataclasses import dataclass
+from typing import Mapping, Any, Sequence, List
+
 from typing import Mapping, Any, Sequence, List
 
 from clients.postgres import get_pg_connection
@@ -18,10 +21,20 @@ class AdvertisementPostgresStorage:
             INSERT INTO advertisements (seller_id, name, description, category, images_qty)
             VALUES ($1, $2, $3, $4, $5)
             RETURNING id, seller_id, name, description, category, images_qty,
+            RETURNING id, seller_id, name, description, category, images_qty,
                       created_at, updated_at
         """
         async with get_pg_connection() as connection:
             row = await connection.fetchrow(
+                query, seller_id, name, description, category, images_qty)
+            if row:
+                logger.info("Advertisement created successfully, id=%s", row["id"])
+                return dict(row)
+            logger.error("Failed to create advertisement - no row returned")
+            raise Exception("Failed to create advertisement")
+
+    async def get_by_id_with_user(self, item_id: int) -> Mapping[str, Any]:
+        logger.info("Selecting advertisement with user info by id=%s", item_id)
                 query, seller_id, name, description, category, images_qty)
             if row:
                 logger.info("Advertisement created successfully, id=%s", row["id"])
@@ -51,12 +64,17 @@ class AdvertisementPostgresStorage:
         logger.info("Selecting all advertisements")
         query = """
             SELECT id, seller_id, name, description, category, images_qty,
+            SELECT id, seller_id, name, description, category, images_qty,
                    created_at, updated_at
             FROM advertisements
             ORDER BY created_at DESC
         """
         async with get_pg_connection() as connection:
             rows = await connection.fetch(query)
+            return [dict(row) for row in rows]
+
+    async def delete(self, item_id: int) -> Mapping[str, Any]:
+        logger.info("Deleting advertisement id=%s", item_id)
             return [dict(row) for row in rows]
 
     async def delete(self, item_id: int) -> Mapping[str, Any]:
