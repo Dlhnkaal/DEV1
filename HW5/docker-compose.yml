@@ -1,0 +1,130 @@
+services:
+  redis:
+    image: redis:latest
+    restart: always
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/root/redis
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    environment:
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DATABASES=${REDIS_DATABASES}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    command:
+      - redpanda
+      - start
+      - --smp ${REDPANDA_SMP}
+      - --memory ${REDPANDA_MEMORY}
+      - --reserve-memory ${REDPANDA_RESERVE_MEMORY}
+      - --overprovisioned
+      - --node-id ${REDPANDA_NODE_ID}
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:${KAFKA_INTERNAL_PORT},OUTSIDE://0.0.0.0:${KAFKA_EXTERNAL_PORT}
+      - --advertise-kafka-addr PLAINTEXT://redpanda:${KAFKA_INTERNAL_PORT},OUTSIDE://${KAFKA_HOST}:${KAFKA_EXTERNAL_PORT}
+    ports:
+      - "${KAFKA_EXTERNAL_PORT}:9092"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  console:
+    image: docker.redpanda.com/redpandadata/console:latest
+    entrypoint: /bin/sh
+    command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:${KAFKA_INTERNAL_PORT}"]
+    ports:
+      - "${CONSOLE_PORT}:8080"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:${POSTGRES_VERSION}
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    volumes:
+      - .:/app
+    restart: always
+    command: uvicorn main:app --host 0.0.0.0 --port ${API_PORT} --reload
+    ports:
+      - "${API_PORT}:8000"
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}
+      - USE_MLFLOW=${USE_MLFLOW}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    volumes:
+      - .:/app
+    restart: always
+    command: python -m workers.moderation_worker
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP}
+      - USE_MLFLOW=${USE_MLFLOW}
+      - PYTHONPATH=/app
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redpanda_data:
+  redis_data:
