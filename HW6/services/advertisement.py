@@ -20,6 +20,15 @@ from errors import AdvertisementNotFoundError, ModelNotReadyError
 from ml.model import load_model, load_mlflow_model
 from sklearn.linear_model import LogisticRegression
 
+import time
+from metrics import (
+    PREDICTIONS_TOTAL, 
+    PREDICTION_DURATION, 
+    PREDICTION_ERRORS_TOTAL, 
+    MODEL_PREDICTION_PROBABILITY
+)
+
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -35,11 +44,46 @@ class AdvertisementMLService:
     def _get_model(self) -> LogisticRegression:
         if self._model is None:
             self._load_model()
-
+            
         if self._model is None:
+            PREDICTION_ERRORS_TOTAL.labels(error_type="model_unavailable").inc()
             raise ModelNotReadyError("Model is not initialized and could not be loaded")
-
+            
         return self._model
+
+    def predict(self, dto: AdvertisementWithUserBase) -> Tuple[bool, float]:
+        model = self._get_model()
+        
+        logger.info(f"Predict for seller_id={dto.seller_id}, item_id={dto.item_id}")
+        
+        features = np.array([
+            [1.0 if dto.is_verified_seller else 0.0,
+             dto.images_qty / 10.0,
+             len(dto.description) / 1000.0,
+             dto.category / 100.0]
+        ])
+
+        start_time = time.time()
+        
+        try:
+            proba = model.predict_proba(features)[0][1]
+            
+            inference_duration = time.time() - start_time
+            PREDICTION_DURATION.observe(inference_duration)
+            
+            is_violation = proba > 0.5
+            
+            MODEL_PREDICTION_PROBABILITY.observe(float(proba))
+            result_label = "violation" if is_violation else "no_violation"
+            PREDICTIONS_TOTAL.labels(result=result_label).inc()
+            
+            logger.info(f"Prediction result: violation={is_violation}, prob={proba:.3f}")
+            return is_violation, float(proba)
+            
+        except Exception as e:
+            PREDICTION_ERRORS_TOTAL.labels(error_type="prediction_error").inc()
+            logger.error(f"Prediction failed: {e}")
+            raise e
 
     def _load_model(self) -> None:
         is_use_mlflow = os.getenv("USE_MLFLOW", "false").lower() == "true"
@@ -84,29 +128,6 @@ class AdvertisementMLService:
             self._model = None
             self._model_loaded = False
             raise e
-
-    def predict(self, dto: AdvertisementWithUserBase) -> Tuple[bool, float]:
-        model = self._get_model()
-
-        logger.info(f"Predict for seller_id={dto.seller_id}, item_id={dto.item_id}")
-
-        features = np.array([
-            [1.0 if dto.is_verified_seller else 0.0,
-             dto.images_qty / 10.0,
-             len(dto.description) / 1000.0,
-             dto.category / 100.0]])
-
-        try:
-            proba = model.predict_proba(features)[0][1]
-            is_violation = proba > 0.5
-
-            logger.info(f"Prediction result: violation={is_violation}, prob={proba:.3f}")
-            return is_violation, float(proba)
-
-        except Exception as e:
-            logger.error(f"Prediction failed: {e}")
-            raise e
-
     async def simple_predict(self, dto: AdvertisementLite) -> Tuple[bool, float]:
         try:
             advertisement = await self.advertisement_repo.get_by_id_with_user(dto.item_id)

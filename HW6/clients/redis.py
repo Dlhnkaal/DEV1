@@ -3,6 +3,9 @@ import redis.asyncio as aioredis
 from typing import AsyncGenerator
 from dotenv import load_dotenv
 
+from contextlib import asynccontextmanager
+
+
 load_dotenv()
 
 redis_client: aioredis.Redis | None = None
@@ -25,6 +28,7 @@ async def close_redis():
     if redis_client:
         await redis_client.aclose()
 
+@asynccontextmanager
 async def get_redis_connection() -> AsyncGenerator[aioredis.Redis, None]:
     if redis_client is None:
         raise RuntimeError("Redis is not initialized")

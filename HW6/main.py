@@ -18,6 +18,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from clients.postgres import init_pg_pool, close_pg_pool
 from clients.redis import init_redis, close_redis
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -59,5 +62,8 @@ async def root() -> Dict[str, str]:
 app.include_router(ad_router, prefix="/advertisement", tags=["Advertisement"])
 app.include_router(mod_router, prefix="/moderation", tags=["Moderation"])
 
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
+

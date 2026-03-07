@@ -1,5 +1,6 @@
 import logging
 import json
+import time
 from datetime import timedelta
 from dataclasses import dataclass, field
 from typing import Optional, Mapping, Any, List
@@ -14,9 +15,9 @@ from models.moderation import (
     AsyncTaskStatusRequest,
     TaskIdList
 )
+from metrics import DB_QUERY_DURATION
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass(frozen=True)
 class ModerationPostgresStorage:
@@ -24,35 +25,47 @@ class ModerationPostgresStorage:
     async def create_pending(self, item_id: int) -> Optional[Mapping[str, Any]]:
         logger.info("Creating pending moderation for item_id=%s", item_id)
         query = """
-            INSERT INTO moderation_results (item_id, status, created_at)
-            VALUES ($1, 'pending', NOW())
-            RETURNING id, item_id, status, created_at, 
-                      is_violation, probability, error_message, processed_at
+        INSERT INTO moderation_results (item_id, status, created_at)
+        VALUES ($1, 'pending', NOW())
+        RETURNING id, item_id, status, created_at, 
+        is_violation, probability, error_message, processed_at
         """
-        async with get_pg_connection() as connection:
-            row = await connection.fetchrow(query, item_id)
-            if row:
-                logger.info("Pending moderation created, id=%s", row["id"])
-                return dict(row)
-            return None
+        start_time = time.time()
+        try:
+            async with get_pg_connection() as connection:
+                row = await connection.fetchrow(query, item_id)
+                if row:
+                    logger.info("Pending moderation created, id=%s", row["id"])
+                    return dict(row)
+                return None
+        finally:
+            DB_QUERY_DURATION.labels(query_type="insert").observe(time.time() - start_time)
 
     async def check_advertisement_exists(self, item_id: int) -> bool:
         query = "SELECT 1 FROM advertisements WHERE id = $1"
-        async with get_pg_connection() as connection:
-            row = await connection.fetchrow(query, item_id)
-            return row is not None
+        start_time = time.time()
+        try:
+            async with get_pg_connection() as connection:
+                row = await connection.fetchrow(query, item_id)
+                return row is not None
+        finally:
+            DB_QUERY_DURATION.labels(query_type="select").observe(time.time() - start_time)
 
     async def get_by_id(self, task_id: int) -> Optional[Mapping[str, Any]]:
         logger.info("Getting moderation result for task_id=%s", task_id)
         query = """
-            SELECT id, item_id, status, created_at, 
-                   is_violation, probability, error_message, processed_at
-            FROM moderation_results 
-            WHERE id = $1
+        SELECT id, item_id, status, created_at, 
+        is_violation, probability, error_message, processed_at
+        FROM moderation_results 
+        WHERE id = $1
         """
-        async with get_pg_connection() as connection:
-            row = await connection.fetchrow(query, task_id)
-            return dict(row) if row else None
+        start_time = time.time()
+        try:
+            async with get_pg_connection() as connection:
+                row = await connection.fetchrow(query, task_id)
+                return dict(row) if row else None
+        finally:
+            DB_QUERY_DURATION.labels(query_type="select").observe(time.time() - start_time)
 
     async def update_result(
         self,
@@ -64,30 +77,36 @@ class ModerationPostgresStorage:
     ) -> None:
         logger.info("Updating moderation result for task_id=%s, status=%s", task_id, status)
         query = """
-            UPDATE moderation_results
-            SET status = $2, 
-                is_violation = $3, 
-                probability = $4, 
-                error_message = $5, 
-                processed_at = NOW()
-            WHERE id = $1
+        UPDATE moderation_results
+        SET status = $2, 
+        is_violation = $3, 
+        probability = $4, 
+        error_message = $5, 
+        processed_at = NOW()
+        WHERE id = $1
         """
-        async with get_pg_connection() as connection:
-            await connection.execute(
-                query, task_id, status, is_violation, probability, error_message
-            )
+        start_time = time.time()
+        try:
+            async with get_pg_connection() as connection:
+                await connection.execute(
+                    query, task_id, status, is_violation, probability, error_message
+                )
+        finally:
+            DB_QUERY_DURATION.labels(query_type="update").observe(time.time() - start_time)
 
     async def get_task_ids_by_item_id(self, item_id: int) -> List[int]:
         logger.info("Getting moderation task ids for item_id=%s", item_id)
         query = "SELECT id FROM moderation_results WHERE item_id = $1"
-        async with get_pg_connection() as connection:
-            rows = await connection.fetch(query, item_id)
-            return [row["id"] for row in rows]
-
+        start_time = time.time()
+        try:
+            async with get_pg_connection() as connection:
+                rows = await connection.fetch(query, item_id)
+                return [row["id"] for row in rows]
+        finally:
+            DB_QUERY_DURATION.labels(query_type="select").observe(time.time() - start_time)
 
 @dataclass(frozen=True)
 class ModerationRedisStorage:
-    """Кэш 1 час, так как после обработки данные не меняются"""
     _TTL: timedelta = timedelta(hours=1)
     _KEY_PREFIX: str = "moderation:"
 
@@ -112,7 +131,6 @@ class ModerationRedisStorage:
     async def delete(self, task_id: int) -> None:
         async with get_redis_connection() as conn:
             await conn.delete(self._key(task_id))
-
 
 @dataclass
 class ModerationRepository:
@@ -159,6 +177,6 @@ class ModerationRepository:
     async def get_task_ids_by_item_id(self, item_id: int) -> TaskIdList:
         task_ids = await self.storage.get_task_ids_by_item_id(item_id)
         return TaskIdList(task_ids=task_ids)
-    
+
     async def delete_cache(self, task_id: int) -> None:
         await self.redis_storage.delete(task_id)

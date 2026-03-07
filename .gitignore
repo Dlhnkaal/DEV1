@@ -1,34 +1,141 @@
-__pycache__/
-*.pyc
-*.pyo
-.env
-/banana
-celerybeat-schedule
-celerybeat-schedule.db
-.venv/
-venv/
-*.egg-info/
-.idea/
-.vscode/
-# .dockerignore
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.pyc
+*.pyo
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+pip-log.txt
+pip-delete-this-directory.txt
 .pytest_cache/
 .coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+*.py,cover
+.pytest_cache/
+pytestdebug.log
+.benchmarks/
 
-# Виртуальное окружение
+# Виртуальные окружения
 banana/
-venv/
 env/
+venv/
 .env/
-*.venv
+.venv/
+ENV/
+env.bak/
+venv.bak/
+pythonenv*
+
+# Логи и базы данных
+*.log
+*.sql
+*.sqlite
+*.db
+celerybeat-schedule
+celerybeat-schedule.db
+*.pot
+*.pyc
+
+# IDE и редакторы
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.iml
+.project
+.classpath
+.settings/
 
 # Системные файлы
 .DS_Store
 Thumbs.db
+*.log
+*.bak
+*.tmp
+*.temp
+desktop.ini
 
-# Локальные настройки
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Celery
+celerybeat-schedule
+celerybeat-schedule.db
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose*.yml
+.docker/
+*.pid
+
+# Безопасность
+*.pem
+*.key
+*.crt
+*.p12
+.secrets/
 .env
-.git/
+.env.local
+.env.*.local
+.flaskenv
+
+# Кэш и временные файлы
+*.cache
+*.pid
+*.seed
+*.pid.lock
+
+# Документация
+docs/_build/
+site/
+*.pdf
+*.epub
+
+# Сборки
+*.egg-info/
+dist/
+build/
+*.exe
+*.msi
+*.deb
+*.rpm
+*.dmg
+
+# Тесты
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache
+*.cover
+.hypothesis/
+
+# Проектные файлы
+/banana
+!.gitkeep
+!.gitignore
+!.env.example
+
+# Архивы
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z

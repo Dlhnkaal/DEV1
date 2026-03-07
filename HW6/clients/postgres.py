@@ -3,6 +3,8 @@ from typing import AsyncGenerator
 import os
 from dotenv import load_dotenv 
 
+from contextlib import asynccontextmanager
+
 load_dotenv()
 
 pg_pool: asyncpg.Pool | None = None
@@ -22,6 +24,7 @@ async def close_pg_pool():
     if pg_pool:
         await pg_pool.close()
 
+@asynccontextmanager
 async def get_pg_connection() -> AsyncGenerator[asyncpg.Connection, None]:
     if pg_pool is None:
         raise RuntimeError("Database pool is not initialized")
