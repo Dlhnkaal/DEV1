@@ -3,7 +3,7 @@ from prometheus_client import Counter, Histogram
 PREDICTIONS_TOTAL = Counter(
     "predictions_total",
     "Total number of predictions",
-    ["result"]  # labels: 'violation' или 'no_violation'
+    ["result"] 
 )
 
 
@@ -17,7 +17,7 @@ PREDICTION_DURATION = Histogram(
 PREDICTION_ERRORS_TOTAL = Counter(
     "prediction_errors_total",
     "Total number of prediction errors",
-    ["error_type"]  # labels: 'model_unavailable' или 'prediction_error'
+    ["error_type"]
 )
 
 
@@ -31,6 +31,6 @@ MODEL_PREDICTION_PROBABILITY = Histogram(
 DB_QUERY_DURATION = Histogram(
     "db_query_duration_seconds",
     "Time spent executing PostgreSQL queries",
-    ["query_type"],  # labels: 'select', 'insert', 'update', 'delete'
+    ["query_type"],
     buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0]
 )
