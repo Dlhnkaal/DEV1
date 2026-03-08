@@ -21,4 +21,4 @@ curl "http://localhost:8000/moderation/moderation_result/1"
 docker-compose logs -f worker
 
 # Нагрузка сервиса 
-.\load_test.ps1 (или руками прописать)
+.\load_test.ps1

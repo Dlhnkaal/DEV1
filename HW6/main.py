@@ -21,7 +21,7 @@ from clients.redis import init_redis, close_redis
 from prometheus_fastapi_instrumentator import Instrumentator
 
 sentry_sdk.init(
-    dsn="https://07de06f962dd33105092120858a4275e@o4511005189210112.ingest.de.sentry.io/4511005208543312",
+    dsn="https://46a307ca7cdec2b541bbdeeeef29968d@o4511005189210112.ingest.de.sentry.io/4511008883015760",
     traces_sample_rate=1.0,
     send_default_pii=True,
     environment="development",
