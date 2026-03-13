@@ -87,9 +87,6 @@ docker-compose*.yml
 *.crt
 *.p12
 .secrets/
-.env
-.env.local
-.env.*.local
 .flaskenv
 
 # Кэш и временные файлы
