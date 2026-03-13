@@ -16,7 +16,7 @@ docker-compose exec postgres psql -U postgres -d advertisement_db -c "INSERT INT
 # Отправка объявления на модерацию
 curl -X POST "http://localhost:8000/moderation/async_predict" -H "Content-Type: application/json" -d '{"item_id": 10}'
 
-# Проверка результата (task_id=1)
+# Проверка результата
 curl "http://localhost:8000/moderation/moderation_result/1"
 
 # Просмотр логов воркера
