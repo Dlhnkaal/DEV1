@@ -1,0 +1,66 @@
+import logging
+from typing import Optional
+from repositories.moderation import ModerationRepository
+from clients.kafka import ModerationProducer
+from models.moderation import (
+    AsyncPredictRequest,
+    AsyncTaskStatusRequest,
+    ModerationResultInDB,
+    ModerationTaskResult,
+    ModerationResultUpdate
+)
+from errors import AdvertisementNotFoundError, ModerationTaskNotFoundError
+
+logger = logging.getLogger(__name__)
+
+class AsyncModerationService:
+    def __init__(self):
+        self.repo = ModerationRepository()
+        self.producer = ModerationProducer()
+        
+    async def start(self):
+        await self.producer.start()
+
+    async def start_moderation(self, dto: AsyncPredictRequest) -> ModerationTaskResult:
+        item_id = dto.item_id
+        
+        exists = await self.repo.check_advertisement_exists(item_id)
+        if not exists:
+            raise AdvertisementNotFoundError(f"Advertisement {item_id} not found")
+        
+        moderation_entry = await self.repo.create_pending(item_id)
+        if not moderation_entry:
+            raise Exception("Failed to create moderation entry")
+            
+        task_id = moderation_entry.id
+
+        try:
+            await self.producer.send_moderation_request(task_id, item_id)
+        except Exception as e:
+            logger.error(f"Failed to send moderation request for task {task_id}: {e}")
+            update_dto = ModerationResultUpdate(
+                status="failed",
+                error_message=f"Kafka error: {str(e)}"
+            )
+            await self.repo.update_result(
+                dto=AsyncTaskStatusRequest(task_id=task_id),
+                update_data=update_dto
+            )
+            raise
+
+        return ModerationTaskResult(
+            task_id=task_id,
+            status="pending",
+            message="Moderation request accepted"
+        )
+
+    async def get_moderation_status(self, dto: AsyncTaskStatusRequest) -> ModerationResultInDB:
+        result = await self.repo.get_result_by_id(dto.task_id)
+        
+        if result is None:
+            raise ModerationTaskNotFoundError(f"Moderation task {dto.task_id} not found")
+            
+        return result
+
+    async def close(self):
+        await self.producer.stop()
