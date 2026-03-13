@@ -26,8 +26,6 @@ pytestdebug.log
 
 # Виртуальные окружения
 banana/
-env/
-venv/
 ENV/
 env.bak/
 venv.bak/
