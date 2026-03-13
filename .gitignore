@@ -76,10 +76,6 @@ celerybeat-schedule.db
 
 # Docker
 .dockerignore
-Dockerfile
-docker-compose*.yml
-.docker/
-*.pid
 
 # Безопасность
 *.pem
