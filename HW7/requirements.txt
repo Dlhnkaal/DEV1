@@ -18,3 +18,4 @@ prometheus-client
 prometheus-fastapi-instrumentator
 sentry-sdk[fastapi] 
 pyjwt
+pip install testcontainers[postgres,redis,kafka]
