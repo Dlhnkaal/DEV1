@@ -12,6 +12,7 @@ from errors import UserNotFoundError
 
 pytestmark = pytest.mark.integration
 
+
 @pytest.mark.asyncio(loop_scope="session")
 @pytest.mark.usefixtures("clean_db")
 class TestAdvertisementRepositoryIntegration:
@@ -22,7 +23,7 @@ class TestAdvertisementRepositoryIntegration:
         user_repo = UserRepository()
         user = await user_repo.create("seller", "password123", "s@ex.com", True)
         repo = AdvertisementRepository()
-        created = await repo.create(seller_id, name, desc, category, img_qty)
+        created = await repo.create(user.id, name, desc, category, img_qty)
         assert created.id is not None
         fetched = await repo.get_by_id_with_user(created.id)
         assert fetched is not None
@@ -79,6 +80,7 @@ class TestModerationRepositoryIntegration:
         repo = ModerationRepository()
         pending = await repo.create_pending(ad.id)
         await repo.update_result(pending.id, status, is_violation, prob, error)
+        await repo.delete_cache(pending.id)
         updated = await repo.get_result_by_id(pending.id)
         assert updated.status == status
         assert updated.is_violation == is_violation
@@ -113,30 +115,78 @@ class TestUserRepositoryIntegration:
 @pytest.mark.asyncio(loop_scope="session")
 @pytest.mark.usefixtures("clean_db")
 class TestAccountRepositoryIntegration:
+
     @pytest.mark.parametrize("login,password", [
         ("acc1", "12345678"),
         ("acc2", "abcdefgh"),
     ])
-    async def test_create_and_get(self, login, password):
+    async def test_create_and_get_by_id(self, login, password):
         repo = AccountRepository()
         created = await repo.create(login, password)
         assert created.id is not None
+        assert created.login == login
+        assert created.is_blocked is False
 
         fetched = await repo.get_by_id(created.id)
         assert fetched.login == login
         assert fetched.is_blocked is False
 
-    @pytest.mark.parametrize("account_id", [999])
-    async def test_get_by_id_not_found(self, account_id):
+    async def test_get_by_id_not_found_raises(self):
         repo = AccountRepository()
         with pytest.raises(UserNotFoundError):
-            await repo.get_by_id(account_id)
+            await repo.get_by_id(99999)
 
-    @pytest.mark.parametrize("account_id", [1])
-    async def test_block(self, account_id):
+    async def test_delete_removes_account(self):
         repo = AccountRepository()
-        created = await repo.create("blockme", "12345678")
+        created = await repo.create("to_delete", "12345678")
+        deleted = await repo.delete(created.id)
+        assert deleted.id == created.id
+
+        with pytest.raises(UserNotFoundError):
+            await repo.get_by_id(created.id)
+
+    async def test_delete_not_found_raises(self):
+        repo = AccountRepository()
+        with pytest.raises(UserNotFoundError):
+            await repo.delete(99999)
+
+    async def test_block_sets_flag(self):
+        repo = AccountRepository()
+        created = await repo.create("to_block", "12345678")
         blocked = await repo.block(created.id)
         assert blocked.is_blocked is True
+
         fetched = await repo.get_by_id(created.id)
         assert fetched.is_blocked is True
+
+    async def test_block_not_found_raises(self):
+        repo = AccountRepository()
+        with pytest.raises(UserNotFoundError):
+            await repo.block(99999)
+
+    @pytest.mark.parametrize("login,password", [
+        ("login_user", "correctpass"),
+    ])
+    async def test_get_by_login_and_password_success(self, login, password):
+        repo = AccountRepository()
+        await repo.create(login, password)
+
+        result = await repo.get_by_login_and_password(login, password)
+        assert isinstance(result, AccountModel)
+        assert result.login == login
+
+    @pytest.mark.parametrize("login,password,wrong_password", [
+        ("pw_user", "correctpass", "wrongpass"),
+    ])
+    async def test_get_by_login_and_password_wrong_password_raises(
+            self, login, password, wrong_password):
+        repo = AccountRepository()
+        await repo.create(login, password)
+
+        with pytest.raises(UserNotFoundError):
+            await repo.get_by_login_and_password(login, wrong_password)
+
+    async def test_get_by_login_and_password_unknown_user_raises(self):
+        repo = AccountRepository()
+        with pytest.raises(UserNotFoundError):
+            await repo.get_by_login_and_password("ghost", "anypass")

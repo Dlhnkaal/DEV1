@@ -110,3 +110,36 @@ class TestAuthRouterIntegration:
     async def test_login_failure(self, async_client: AsyncClient, login, password):
         response = await async_client.post("/auth/login", json={"login": login, "password": password})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.usefixtures("clean_db")
+class TestErrorHandlersIntegration:
+
+    async def test_moderation_task_not_found_returns_404(
+            self, auth_client: AsyncClient):
+        response = await auth_client.get("/moderation/moderation_result/99999")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    async def test_advertisement_not_found_returns_404(
+            self, auth_client: AsyncClient):
+        response = await auth_client.post(
+            "/advertisement/simple_predict", json={"item_id": 99999}
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    async def test_unauthorized_no_cookie_returns_401(
+            self, async_client: AsyncClient):
+        response = await async_client.post(
+            "/advertisement/simple_predict", json={"item_id": 1}
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.json()["message"] == "User not authorized"
+
+    async def test_authorized_error_wrong_credentials_returns_400(
+            self, async_client: AsyncClient):
+        response = await async_client.post(
+            "/auth/login", json={"login": "nobody", "password": "wrongpass"}
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["message"] == "Login or password is not corrected"

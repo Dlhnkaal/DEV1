@@ -111,7 +111,10 @@ class ModerationWorker:
                 for attempt in range(1, self.MAX_RETRIES + 1):
                     try:
                         adv_lite = AdvertisementLite(item_id=item_id)
-                        is_violation, proba = await self.ml_service.simple_predict(adv_lite)
+                        # simple_predict returns PredictionResult — unpack by attribute
+                        result = await self.ml_service.simple_predict(adv_lite)
+                        is_violation = result.is_violation
+                        proba = result.probability
 
                         await self.moderation_repo.update_result(
                             task_id=task_id,
