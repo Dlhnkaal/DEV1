@@ -9,8 +9,11 @@ from errors import (
     AdvertisementNotFoundError, ModerationTaskNotFoundError, ModelNotReadyError,
     UnauthorizedError, AuthorizedError, UserNotFoundError
 )
-from models.advertisement import AdvertisementLite
+from models.advertisement import AdvertisementLite, PredictionResult, ActionStatus
 from models.moderation import AsyncPredictRequest, AsyncTaskStatusRequest
+from models.auth import TokenPairResponse
+from models.account import AccountModel
+
 
 class TestAdvertisementMLService:
     @pytest.mark.parametrize("dto,is_violation,probability", [
@@ -19,13 +22,16 @@ class TestAdvertisementMLService:
     ])
     async def test_simple_predict_success(self, dto, is_violation, probability):
         service = AdvertisementMLService()
-        # мокаем _get_model и predict, так как они синхронные
-        with patch.object(service, '_get_model', return_value=MagicMock()) as mock_get_model:
-            with patch.object(service, 'predict', return_value=(is_violation, probability)) as mock_predict:
-                with patch.object(service.advertisement_repo, 'get_by_id_with_user', new=AsyncMock(return_value=MagicMock())):
-                    result = await service.simple_predict(dto)
-                    assert result == (is_violation, probability)
-                    mock_predict.assert_called_once()
+        mock_ad = MagicMock()
+        expected_result = PredictionResult(is_violation=is_violation, probability=probability)
+
+        with patch.object(service.advertisement_repo, 'get_by_id_with_user', new=AsyncMock(return_value=mock_ad)):
+            with patch.object(service, 'predict', return_value=expected_result) as mock_predict:
+                result = await service.simple_predict(dto)
+                assert isinstance(result, PredictionResult)
+                assert result.is_violation == is_violation
+                assert result.probability == probability
+                mock_predict.assert_called_once_with(mock_ad)
 
     @pytest.mark.parametrize("dto,exception", [
         (AdvertisementLite(item_id=999), AdvertisementNotFoundError),
@@ -51,24 +57,27 @@ class TestAdvertisementMLService:
         service = AdvertisementMLService()
         service.moderation_repo.get_task_ids_by_item_id = AsyncMock(return_value=MagicMock(task_ids=[10, 11]))
         service.moderation_repo.delete_cache = AsyncMock()
-        service.advertisement_repo.close = AsyncMock(return_value=close_success)
+        service.advertisement_repo.close = AsyncMock(return_value=ActionStatus(success=close_success))
 
         dto = MagicMock(item_id=item_id)
         result = await service.close_advertisement(dto)
-        assert result == close_success
+        assert isinstance(result, ActionStatus)
+        assert result.success == close_success
         service.moderation_repo.delete_cache.assert_any_call(10)
         service.moderation_repo.delete_cache.assert_any_call(11)
 
+
 class TestAuthService:
     @pytest.mark.parametrize("login,password,account,expected_exception", [
-        ("user", "pass", MagicMock(is_blocked=False), None),
+        ("user", "pass", MagicMock(id=1, is_blocked=False), None),
         ("user", "wrong", None, AuthorizedError),
-        ("blocked", "pass", MagicMock(is_blocked=True), AuthorizedError),
+        ("blocked", "pass", MagicMock(id=2, is_blocked=True), AuthorizedError),
     ])
     async def test_login(self, login, password, account, expected_exception):
-        # Используем patch для методов репозиториев на уровне классов
-        with patch("services.auth.AccountRepository.get_by_login_and_password", new=AsyncMock(return_value=account)) as mock_get:
-            with patch("services.auth.AuthRepository.update_refresh_token", new=AsyncMock()) as mock_update:
+        with patch("services.auth.AccountRepository.get_by_login_and_password",
+                   new=AsyncMock(return_value=account)) as mock_get:
+            with patch("services.auth.AuthRepository.update_refresh_token",
+                       new=AsyncMock()) as mock_update:
                 service = AuthService()
                 service._build_user_token = MagicMock(return_value="user_token")
                 service._build_refresh_token = MagicMock(return_value="refresh_token")
@@ -79,50 +88,62 @@ class TestAuthService:
                     with pytest.raises(expected_exception):
                         await service.login(login, password)
                 else:
-                    user_token, refresh_token = await service.login(login, password)
-                    assert user_token == "user_token"
-                    assert refresh_token == "refresh_token"
+                    result = await service.login(login, password)
+                    assert isinstance(result, TokenPairResponse)
+                    assert result.user_token == "user_token"
+                    assert result.refresh_token == "refresh_token"
                     mock_get.assert_called_once_with(login, password)
                     mock_update.assert_called_once()
 
     @pytest.mark.parametrize("old_token,user_id,account,expected_exception", [
-        ("valid", 1, MagicMock(is_blocked=False), None),
+        ("valid", 1, MagicMock(id=1, is_blocked=False), None),
         ("expired", None, None, UnauthorizedError),
-        ("valid", 2, MagicMock(is_blocked=True), UnauthorizedError),
+        ("valid", 2, MagicMock(id=2, is_blocked=True), UnauthorizedError),
     ])
     async def test_refresh_token(self, old_token, user_id, account, expected_exception):
-        with patch("services.auth.AuthRepository.get_user_id_by_refresh_token", new=AsyncMock(return_value=user_id)) as mock_get_id:
-            with patch("services.auth.AccountRepository.get_by_id", new=AsyncMock(return_value=account)) as mock_get_account:
-                with patch("services.auth.AuthRepository.update_refresh_token", new=AsyncMock()) as mock_update:
+        from models.auth import UserIdResponse
+
+        with patch("services.auth.AuthRepository.get_user_id_by_refresh_token",
+                   new=AsyncMock(return_value=UserIdResponse(user_id=user_id))) as mock_get_id:
+            with patch("services.auth.AccountRepository.get_by_id",
+                       new=AsyncMock(return_value=account)) as mock_get_account:
+                with patch("services.auth.AuthRepository.update_refresh_token",
+                           new=AsyncMock()) as mock_update:
                     service = AuthService()
                     service._build_user_token = MagicMock(return_value="new_user")
                     service._build_refresh_token = MagicMock(return_value="new_refresh")
 
                     if expected_exception:
-                        if not user_id:
-                            with pytest.raises(UnauthorizedError):
-                                await service.refresh_token(old_token)
-                        else:
-                            with pytest.raises(UnauthorizedError):
-                                await service.refresh_token(old_token)
+                        with pytest.raises(UnauthorizedError):
+                            await service.refresh_token(old_token)
                     else:
-                        user_token, new_refresh = await service.refresh_token(old_token)
-                        assert user_token == "new_user"
-                        assert new_refresh == "new_refresh"
+                        result = await service.refresh_token(old_token)
+                        assert isinstance(result, TokenPairResponse)
+                        assert result.user_token == "new_user"
+                        assert result.refresh_token == "new_refresh"
                         mock_get_id.assert_called_once_with(old_token)
                         mock_get_account.assert_called_once_with(user_id)
                         mock_update.assert_called_once()
 
     @pytest.mark.parametrize("token,payload,account,expected", [
-        ("good", {"user_id": 1, "expired_at": (datetime.now() + timedelta(hours=1)).isoformat()}, MagicMock(is_blocked=False), True),
-        ("expired", {"user_id": 1, "expired_at": (datetime.now() - timedelta(hours=1)).isoformat()}, None, UnauthorizedError),
+        ("good",
+         {"user_id": 1, "expired_at": (datetime.now() + timedelta(hours=1)).isoformat()},
+         MagicMock(id=1, is_blocked=False),
+         True),
+        ("expired",
+         {"user_id": 1, "expired_at": (datetime.now() - timedelta(hours=1)).isoformat()},
+         None,
+         UnauthorizedError),
         ("bad", {}, None, UnauthorizedError),
-        ("blocked", {"user_id": 1, "expired_at": (datetime.now() + timedelta(hours=1)).isoformat()}, MagicMock(is_blocked=True), UnauthorizedError),
+        ("blocked",
+         {"user_id": 1, "expired_at": (datetime.now() + timedelta(hours=1)).isoformat()},
+         MagicMock(id=1, is_blocked=True),
+         UnauthorizedError),
     ])
     async def test_verify(self, token, payload, account, expected):
-        # Патчим метод класса AuthService._parse_token, так как экземпляр frozen
         with patch.object(AuthService, '_parse_token', return_value=payload):
-            with patch("services.auth.AccountRepository.get_by_id", new=AsyncMock(return_value=account)) as mock_get_account:
+            with patch("services.auth.AccountRepository.get_by_id",
+                       new=AsyncMock(return_value=account)) as mock_get_account:
                 service = AuthService()
                 if expected is True:
                     result = await service.verify(token)
@@ -131,25 +152,31 @@ class TestAuthService:
                     with pytest.raises(expected):
                         await service.verify(token)
 
+
 class TestModerationService:
     @pytest.mark.parametrize("item_id,exists,create_result,send_ok,expected_exception", [
         (1, True, MagicMock(id=100), True, None),
         (2, False, None, False, AdvertisementNotFoundError),
-        (3, True, MagicMock(id=101), False, Exception),  # ошибка Kafka
+        (3, True, MagicMock(id=101), False, Exception),
     ])
     async def test_start_moderation(self, item_id, exists, create_result, send_ok, expected_exception):
         service = AsyncModerationService()
-        # мокаем репозиторий и продюсер
-        with patch.object(service.repo, 'check_advertisement_exists', new=AsyncMock(return_value=exists)):
-            with patch.object(service.repo, 'create_pending', new=AsyncMock(return_value=create_result)):
-                with patch.object(service.producer, 'send_moderation_request', new=AsyncMock(side_effect=None if send_ok else Exception("Kafka error"))):
-                    with patch.object(service.repo, 'update_result', new=AsyncMock()):
+        with patch.object(service.repo, 'check_advertisement_exists',
+                          new=AsyncMock(return_value=exists)):
+            with patch.object(service.repo, 'create_pending',
+                              new=AsyncMock(return_value=create_result)):
+                with patch.object(service.producer, 'send_moderation_request',
+                                  new=AsyncMock(
+                                      side_effect=None if send_ok else Exception("Kafka error"))):
+                    with patch.object(service.repo, 'update_result',
+                                      new=AsyncMock()) as mock_update:
                         dto = AsyncPredictRequest(item_id=item_id)
                         if expected_exception:
                             with pytest.raises(expected_exception):
                                 await service.start_moderation(dto)
+                            # Если Kafka упала — должны обновить статус на failed
                             if exists and not send_ok and create_result:
-                                service.repo.update_result.assert_awaited_once()
+                                mock_update.assert_awaited_once()
                         else:
                             result = await service.start_moderation(dto)
                             assert result.task_id == create_result.id
@@ -161,7 +188,8 @@ class TestModerationService:
     ])
     async def test_get_moderation_status(self, task_id, repo_result, expected_exception):
         service = AsyncModerationService()
-        with patch.object(service.repo, 'get_result_by_id', new=AsyncMock(return_value=repo_result)):
+        with patch.object(service.repo, 'get_result_by_id',
+                          new=AsyncMock(return_value=repo_result)):
             dto = AsyncTaskStatusRequest(task_id=task_id)
             if expected_exception:
                 with pytest.raises(expected_exception):

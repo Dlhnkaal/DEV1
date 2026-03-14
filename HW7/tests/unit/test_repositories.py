@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
-from datetime import timedelta
+from datetime import datetime, timedelta
+
 from repositories.advertisement import AdvertisementRepository
 from repositories.moderation import ModerationRepository
 from repositories.auth import AuthRepository
@@ -8,28 +9,59 @@ from repositories.user import UserRepository
 from repositories.account import AccountRepository
 from errors import UserNotFoundError
 from models.account import AccountModel
-from models.user import UserInDB # Добавлен импорт
-from models.advertisement import AdvertisementWithUserBase, AdvertisementInDB # Добавлен импорт
+from models.user import UserInDB
+from models.advertisement import AdvertisementWithUserBase, AdvertisementInDB, ActionStatus
+from models.auth import UserIdResponse, TokenUpdateResponse
+
+
+
+def _make_moderation_data(id_: int, **kwargs) -> dict:
+    base = {
+        "id": id_,
+        "item_id": 1,
+        "status": "pending",
+        "is_violation": None,
+        "probability": None,
+        "error_message": None,
+        "created_at": datetime(2024, 1, 1, 12, 0, 0),
+        "processed_at": None,
+    }
+    base.update(kwargs)
+    return base
+
 
 class TestAdvertisementRepository:
     @pytest.mark.parametrize("item_id,cached,storage_return", [
-        (1, {"item_id": 1, "seller_id": 1, "name": "Ad", "description": "Desc", "category": 1, "images_qty": 1, "is_verified_seller": True}, {"item_id": 1, "seller_id": 1, "name": "Ad", "description": "Desc", "category": 1, "images_qty": 1, "is_verified_seller": True}),
-        (2, None, {"item_id": 2, "seller_id": 1, "name": "Ad", "description": "Desc", "category": 1, "images_qty": 1, "is_verified_seller": True}),
+        (
+            1,
+            {"item_id": 1, "seller_id": 1, "name": "Ad", "description": "Desc",
+             "category": 1, "images_qty": 1, "is_verified_seller": True},
+            {"item_id": 1, "seller_id": 1, "name": "Ad", "description": "Desc",
+             "category": 1, "images_qty": 1, "is_verified_seller": True},
+        ),
+        (
+            2,
+            None,
+            {"item_id": 2, "seller_id": 1, "name": "Ad", "description": "Desc",
+             "category": 1, "images_qty": 1, "is_verified_seller": True},
+        ),
         (3, None, None),
     ])
     async def test_get_by_id_with_user(self, item_id, cached, storage_return):
         repo = AdvertisementRepository()
         with patch.object(repo.redis_storage, 'get', AsyncMock(return_value=cached)) as mock_redis_get, \
-             patch.object(repo.storage, 'get_by_id_with_user', AsyncMock(return_value=storage_return)) as mock_storage_get, \
+             patch.object(repo.storage, 'get_by_id_with_user',
+                          AsyncMock(return_value=storage_return)) as mock_storage_get, \
              patch.object(repo.redis_storage, 'set', AsyncMock()) as mock_redis_set:
             result = await repo.get_by_id_with_user(item_id)
-            
+
             if cached or storage_return:
+                assert result is not None
                 assert result.item_id == item_id
                 assert isinstance(result, AdvertisementWithUserBase)
             else:
                 assert result is None
-                
+
             mock_redis_get.assert_awaited_once_with(item_id)
             if not cached:
                 mock_storage_get.assert_awaited_once_with(item_id)
@@ -42,29 +74,35 @@ class TestAdvertisementRepository:
     ])
     async def test_close(self, item_id, storage_result):
         repo = AdvertisementRepository()
-        with patch.object(repo.storage, 'delete', AsyncMock(return_value=storage_result)) as mock_storage_delete, \
+        with patch.object(repo.storage, 'delete',
+                          AsyncMock(return_value=storage_result)) as mock_storage_delete, \
              patch.object(repo.redis_storage, 'delete', AsyncMock()) as mock_redis_delete:
             result = await repo.close(item_id)
+            assert isinstance(result, ActionStatus)
             mock_storage_delete.assert_awaited_once_with(item_id)
             if storage_result:
-                assert result is True
+                assert result.success is True
                 mock_redis_delete.assert_awaited_once_with(item_id)
             else:
-                assert result is False
+                assert result.success is False
+
 
 class TestModerationRepository:
     @pytest.mark.parametrize("task_id,cached,storage_return", [
-        (1, {"id": 1}, {"id": 1}),
-        (2, None, {"id": 2}),
+        (1, _make_moderation_data(1), _make_moderation_data(1)),
+        (2, None, _make_moderation_data(2)),
         (3, None, None),
     ])
     async def test_get_result_by_id(self, task_id, cached, storage_return):
         repo = ModerationRepository()
-        with patch.object(repo.redis_storage, 'get', AsyncMock(return_value=cached)) as mock_redis_get, \
-             patch.object(repo.storage, 'get_by_id', AsyncMock(return_value=storage_return)) as mock_storage_get, \
+        with patch.object(repo.redis_storage, 'get',
+                          AsyncMock(return_value=cached)) as mock_redis_get, \
+             patch.object(repo.storage, 'get_by_id',
+                          AsyncMock(return_value=storage_return)) as mock_storage_get, \
              patch.object(repo.redis_storage, 'set', AsyncMock()) as mock_redis_set:
             result = await repo.get_result_by_id(task_id)
             if cached or storage_return:
+                assert result is not None
                 assert result.id == task_id
             else:
                 assert result is None
@@ -80,7 +118,8 @@ class TestModerationRepository:
     ])
     async def test_update_result(self, task_id, status, is_violation, probability, error_message):
         repo = ModerationRepository()
-        with patch.object(repo.storage, 'update_result', AsyncMock()) as mock_storage_update, \
+        with patch.object(repo.storage, 'update_result',
+                          AsyncMock()) as mock_storage_update, \
              patch.object(repo.redis_storage, 'delete', AsyncMock()) as mock_redis_delete:
             await repo.update_result(task_id, status, is_violation, probability, error_message)
             mock_storage_update.assert_awaited_once_with(
@@ -92,6 +131,7 @@ class TestModerationRepository:
             )
             mock_redis_delete.assert_awaited_once_with(task_id)
 
+
 class TestAuthRepository:
     @pytest.mark.parametrize("refresh_token,stored_id", [
         ("token123", 42),
@@ -99,9 +139,11 @@ class TestAuthRepository:
     ])
     async def test_get_user_id_by_refresh_token(self, refresh_token, stored_id):
         repo = AuthRepository()
-        with patch.object(repo.redis_storage, 'get', AsyncMock(return_value=str(stored_id) if stored_id else None)) as mock_get:
+        with patch.object(repo.redis_storage, 'get',
+                          AsyncMock(return_value=str(stored_id) if stored_id is not None else None)) as mock_get:
             result = await repo.get_user_id_by_refresh_token(refresh_token)
-            assert result == stored_id
+            assert isinstance(result, UserIdResponse)
+            assert result.user_id == stored_id
             mock_get.assert_awaited_once_with(refresh_token)
 
     @pytest.mark.parametrize("user_id,new_token,ttl,old_token", [
@@ -113,10 +155,12 @@ class TestAuthRepository:
         with patch.object(repo.redis_storage, 'delete', AsyncMock()) as mock_delete, \
              patch.object(repo.redis_storage, 'set', AsyncMock()) as mock_set:
             result = await repo.update_refresh_token(user_id, new_token, ttl, old_token)
-            assert result is True
+            assert isinstance(result, TokenUpdateResponse)
+            assert result.success is True
             if old_token:
                 mock_delete.assert_awaited_once_with(old_token)
             mock_set.assert_awaited_once_with(user_id=user_id, refresh_token=new_token, ttl=ttl)
+
 
 class TestAccountRepository:
     @pytest.mark.parametrize("account_id,storage_return,should_raise", [
@@ -125,7 +169,8 @@ class TestAccountRepository:
     ])
     async def test_get_by_id(self, account_id, storage_return, should_raise):
         repo = AccountRepository()
-        with patch.object(repo.storage, 'get_by_id', AsyncMock(return_value=storage_return)) as mock_get:
+        with patch.object(repo.storage, 'get_by_id',
+                          AsyncMock(return_value=storage_return)) as mock_get:
             if should_raise:
                 with pytest.raises(UserNotFoundError):
                     await repo.get_by_id(account_id)

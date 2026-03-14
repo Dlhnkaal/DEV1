@@ -40,7 +40,7 @@ class TestAdvertisementModels:
 
     @pytest.mark.parametrize("item_id,is_verified_seller", [
         (10, True),
-        (1, False),  # item_id должно быть > 0
+        (1, False), 
     ])
     def test_advertisement_with_user_base(self, item_id, is_verified_seller):
         ad = AdvertisementWithUserBase(

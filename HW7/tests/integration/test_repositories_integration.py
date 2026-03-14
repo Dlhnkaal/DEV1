@@ -20,7 +20,6 @@ class TestAdvertisementRepositoryIntegration:
     ])
     async def test_create_and_get(self, seller_id, name, desc, category, img_qty):
         user_repo = UserRepository()
-        # Changed "pass" to "password123" to satisfy 8 character validation
         user = await user_repo.create("seller", "password123", "s@ex.com", True)
         repo = AdvertisementRepository()
         created = await repo.create(seller_id, name, desc, category, img_qty)
@@ -41,7 +40,6 @@ class TestAdvertisementRepositoryIntegration:
     ])
     async def test_close(self, item_id, expected):
         user_repo = UserRepository()
-        # Changed "pass" to "password123"
         user = await user_repo.create("seller", "password123", "s@ex.com", True)
         ad_repo = AdvertisementRepository()
         ad = await ad_repo.create(user.id, "Ad", "Desc", 1, 1)
@@ -55,7 +53,6 @@ class TestModerationRepositoryIntegration:
     @pytest.mark.parametrize("item_id", [1])
     async def test_create_pending_and_get(self, item_id):
         user_repo = UserRepository()
-        # Changed "pass" to "password123"
         user = await user_repo.create("seller", "password123", "s@ex.com", True)
         ad_repo = AdvertisementRepository()
         ad = await ad_repo.create(user.id, "Ad", "Desc", 1, 1)
@@ -75,7 +72,6 @@ class TestModerationRepositoryIntegration:
     ])
     async def test_update_result(self, task_id, status, is_violation, prob, error):
         user_repo = UserRepository()
-        # Changed "pass" to "password123"
         user = await user_repo.create("seller", "password123", "s@ex.com", True)
         ad_repo = AdvertisementRepository()
         ad = await ad_repo.create(user.id, "Ad", "Desc", 1, 1)

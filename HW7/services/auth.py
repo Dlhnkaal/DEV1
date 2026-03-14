@@ -15,7 +15,7 @@ class AuthService:
     account_repo: AccountRepository = field(default_factory=AccountRepository)
     auth_repo: AuthRepository = field(default_factory=AuthRepository)
     
-    _SECRET = 'secret_for_token'
+    _SECRET = 'absolute_secret_secret_secret_for_token'
     _USER_TOKEN_TTL = timedelta(days=1)
     _REFRESH_USER_TOKEN_TTL = timedelta(days=7)
 
