@@ -12,7 +12,7 @@ from metrics import DB_QUERY_DURATION
 
 logger = logging.getLogger(__name__)
 
-@dataclass(frozen=True)
+@dataclass
 class UserPostgresStorage:
     async def create(self, login: str, password: str, email: str, is_verified_seller: bool) -> Mapping[str, Any]:
         logger.info("Creating user name=%s, email=%s", login, email)
@@ -62,7 +62,7 @@ class UserPostgresStorage:
         finally:
             DB_QUERY_DURATION.labels(query_type="select").observe(time.time() - start_time)
 
-@dataclass(frozen=True)
+@dataclass
 class UserRedisStorage:
     _TTL: timedelta = timedelta(days=1)
     _KEY_PREFIX: str = "user:"

@@ -11,15 +11,17 @@ from models.advertisement import (
 )
 
 from errors import AdvertisementNotFoundError, ModelNotReadyError
-
 from dependencies import MLServiceDepend, AuthDepend
+
 
 class PredictionMLResponse(BaseModel):
     is_violation: bool = Field()
     probability: float = Field()
 
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
 
 @router.post("/predict", response_model=PredictionMLResponse, status_code=status.HTTP_200_OK)
 async def predict(
@@ -28,8 +30,11 @@ async def predict(
     service: MLServiceDepend
 ) -> PredictionMLResponse:
     try:
-        is_violation, probability = service.predict(dto)
-        return PredictionMLResponse(is_violation=is_violation, probability=probability)
+        prediction_result = await service.predict(dto)
+        return PredictionMLResponse(
+            is_violation=prediction_result.is_violation, 
+            probability=prediction_result.probability
+        )
     except ModelNotReadyError as e:
         sentry_sdk.capture_exception(e)
         raise HTTPException(
@@ -44,6 +49,7 @@ async def predict(
             detail="Prediction failed"
         ) from e
 
+
 @router.post("/simple_predict", response_model=PredictionMLResponse, status_code=status.HTTP_200_OK)
 async def simple_predict(
     dto: AdvertisementLite,
@@ -51,8 +57,11 @@ async def simple_predict(
     service: MLServiceDepend
 ) -> PredictionMLResponse:
     try:
-        is_violation, probability = await service.simple_predict(dto)
-        return PredictionMLResponse(is_violation=is_violation, probability=probability)
+        prediction_result = await service.simple_predict(dto)
+        return PredictionMLResponse(
+            is_violation=prediction_result.is_violation, 
+            probability=prediction_result.probability
+        )
     except AdvertisementNotFoundError as e:
         sentry_sdk.capture_exception(e)
         raise HTTPException(
@@ -73,14 +82,15 @@ async def simple_predict(
             detail="Prediction failed"
         ) from e
 
+
 @router.post("/close", response_model=CloseAdvertisementResponse, status_code=status.HTTP_200_OK)
 async def close_advertisement(
     dto: CloseAdvertisementRequest,
     current_account: AuthDepend, 
     service: MLServiceDepend
 ) -> CloseAdvertisementResponse:
-    success = await service.close_advertisement(dto)
-    if not success:
+    action_status = await service.close_advertisement(dto)
+    if not action_status.success:
         e = AdvertisementNotFoundError("Advertisement not found")
         sentry_sdk.capture_exception(e)
         raise HTTPException(

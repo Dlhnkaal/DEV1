@@ -35,5 +35,13 @@ class CloseAdvertisementRequest(BaseModel):
     item_id: int = Field(gt=0)
 
 class CloseAdvertisementResponse(BaseModel):
-    message: str = Field(ge=0)
+    message: str = Field(min_length=1)  # Fixed: removed ge=0 constraint on string
     item_id: int = Field()
+
+# --- New Models for strict service/repository outputs ---
+class PredictionResult(BaseModel):
+    is_violation: bool
+    probability: float
+
+class ActionStatus(BaseModel):
+    success: bool

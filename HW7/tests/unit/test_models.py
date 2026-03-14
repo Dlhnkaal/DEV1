@@ -7,16 +7,16 @@ from datetime import datetime
 
 class TestAdvertisementModels:
     @pytest.mark.parametrize("seller_id,name,description,category,images_qty,should_raise", [
-        (1, "Valid", "Desc", 50, 5, False),         
-        (-1, "Valid", "Desc", 50, 5, True),        
-        (1, "", "Desc", 50, 5, True),               
-        (1, "a"*101, "Desc", 50, 5, True),          
-        (1, "Valid", "", 50, 5, True),              
-        (1, "Valid", "a"*1001, 50, 5, True),        
-        (1, "Valid", "Desc", -1, 5, True),          
-        (1, "Valid", "Desc", 101, 5, True),         
-        (1, "Valid", "Desc", 50, -1, True),         
-        (1, "Valid", "Desc", 50, 11, True),         
+        (1, "Valid", "Desc", 50, 5, False),
+        (-1, "Valid", "Desc", 50, 5, True),
+        (1, "", "Desc", 50, 5, True),
+        (1, "a"*101, "Desc", 50, 5, True),
+        (1, "Valid", "", 50, 5, True),
+        (1, "Valid", "a"*1001, 50, 5, True),
+        (1, "Valid", "Desc", -1, 5, True),
+        (1, "Valid", "Desc", 101, 5, True),
+        (1, "Valid", "Desc", 50, -1, True),
+        (1, "Valid", "Desc", 50, 11, True),
     ])
     def test_advertisement_base(self, seller_id, name, description, category, images_qty, should_raise):
         if should_raise:
@@ -40,7 +40,7 @@ class TestAdvertisementModels:
 
     @pytest.mark.parametrize("item_id,is_verified_seller", [
         (10, True),
-        (0, False), 
+        (1, False),  # item_id должно быть > 0
     ])
     def test_advertisement_with_user_base(self, item_id, is_verified_seller):
         ad = AdvertisementWithUserBase(
@@ -90,9 +90,12 @@ class TestModerationModels:
 
 class TestAccountModel:
     @pytest.mark.parametrize("id,login,password,is_blocked", [
-        (1, "user", "pass", False),
-        (2, "admin", "secret", True),
+        (1, "user", "password123", False),
+        (2, "admin", "secret456", True),
     ])
     def test_account_model(self, id, login, password, is_blocked):
         acc = AccountModel(id=id, login=login, password=password, is_blocked=is_blocked)
         assert acc.id == id
+        assert acc.login == login
+        assert acc.password == password
+        assert acc.is_blocked == is_blocked

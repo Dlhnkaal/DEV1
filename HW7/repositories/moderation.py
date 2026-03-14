@@ -19,7 +19,7 @@ from metrics import DB_QUERY_DURATION
 
 logger = logging.getLogger(__name__)
 
-@dataclass(frozen=True)
+@dataclass
 class ModerationPostgresStorage:
 
     async def create_pending(self, item_id: int) -> Optional[Mapping[str, Any]]:
@@ -105,7 +105,7 @@ class ModerationPostgresStorage:
         finally:
             DB_QUERY_DURATION.labels(query_type="select").observe(time.time() - start_time)
 
-@dataclass(frozen=True)
+@dataclass
 class ModerationRedisStorage:
     _TTL: timedelta = timedelta(hours=1)
     _KEY_PREFIX: str = "moderation:"

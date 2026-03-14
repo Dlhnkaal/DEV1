@@ -17,7 +17,7 @@ class ModerationProducer:
     async def start(self) -> None:
         self._producer = AIOKafkaProducer(bootstrap_servers=self._bootstrap)
         await self._producer.start()
-
+        
     async def stop(self) -> None:
         if self._producer:
             await self._producer.stop()

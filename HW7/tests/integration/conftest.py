@@ -36,11 +36,7 @@ async def async_client(app: FastAPI) -> AsyncGenerator:
     # Import correct services based on dependencies.py
     from services.advertisement import AdvertisementMLService
     from services.moderation import AsyncModerationService
-    from clients.kafka import ModerationProducer
     from models.advertisement import PredictionResult, ActionStatus
-    
-    # Mock the Producer so it doesn't attempt to connect to Kafka
-    mock_producer = AsyncMock(spec=ModerationProducer)
     
     # Mock ML Service
     app.state.ml_service = AsyncMock(spec=AdvertisementMLService)
@@ -48,8 +44,8 @@ async def async_client(app: FastAPI) -> AsyncGenerator:
     app.state.ml_service.predict.return_value = PredictionResult(is_violation=False, probability=0.1)
     app.state.ml_service.close_advertisement.return_value = ActionStatus(success=True)
 
-    # Mock Moderation Service
-    app.state.moderation_service = AsyncModerationService(producer=mock_producer)
+    # Mock Moderation Service (instantiate normally, without `producer=`)
+    app.state.moderation_service = AsyncModerationService()
     app.state.moderation_service.start_moderation = AsyncMock()
     
     class MockResult:
@@ -61,7 +57,7 @@ async def async_client(app: FastAPI) -> AsyncGenerator:
         probability = 0.0
 
     app.state.moderation_service.start_moderation.return_value = MockResult()
-    app.state.moderation_service.get_moderation_status.return_value = MockResult()
+    app.state.moderation_service.get_moderation_status = AsyncMock(return_value=MockResult())
     
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client

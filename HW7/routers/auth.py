@@ -3,11 +3,14 @@ from pydantic import BaseModel
 from dependencies import AuthServiceDepend
 from errors import UnauthorizedError
 
+
 router = APIRouter()
+
 
 class LoginRequest(BaseModel):
     login: str
     password: str
+
 
 @router.post("/login")
 async def login_handler(
@@ -15,10 +18,10 @@ async def login_handler(
     request: LoginRequest,
     auth_service: AuthServiceDepend
 ):
-    access_token, refresh_token = await auth_service.login(request.login, request.password)
+    token_response = await auth_service.login(request.login, request.password)
     
-    response.set_cookie(key="x-user-token", value=access_token, httponly=True)
-    response.set_cookie(key="x-refresh-token", value=refresh_token, httponly=True)
+    response.set_cookie(key="x-user-token", value=token_response.user_token, httponly=True)
+    response.set_cookie(key="x-refresh-token", value=token_response.refresh_token, httponly=True)
     
     return {"message": "Authorization was successful"}
 
@@ -33,9 +36,9 @@ async def refresh_handler(
     if not old_refresh_token:
         raise UnauthorizedError()
         
-    access_token, new_refresh_token = await auth_service.refresh_token(old_refresh_token)
+    token_response = await auth_service.refresh_token(old_refresh_token)
     
-    response.set_cookie(key="x-user-token", value=access_token, httponly=True)
-    response.set_cookie(key="x-refresh-token", value=new_refresh_token, httponly=True)
+    response.set_cookie(key="x-user-token", value=token_response.user_token, httponly=True)
+    response.set_cookie(key="x-refresh-token", value=token_response.refresh_token, httponly=True)
     
     return {"message": "Tokens refreshed successfully"}

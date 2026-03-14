@@ -1,21 +1,22 @@
 import logging
 import numpy as np
 import os
-from typing import Optional, Tuple
+from typing import Optional
 from dataclasses import dataclass, field
 
 from models.advertisement import (
     AdvertisementWithUserBase,
     AdvertisementLite,
-    CloseAdvertisementRequest)
+    CloseAdvertisementRequest,
+    PredictionResult,
+    ActionStatus
+)
 
 from repositories.advertisement import AdvertisementRepository
 from repositories.moderation import ModerationRepository
 
 from repositories.user import UserRepository
 from errors import AdvertisementNotFoundError, ModelNotReadyError
-
-
 
 from ml.model import load_model, load_mlflow_model
 from sklearn.linear_model import LogisticRegression
@@ -27,7 +28,6 @@ from metrics import (
     PREDICTION_ERRORS_TOTAL, 
     MODEL_PREDICTION_PROBABILITY
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class AdvertisementMLService:
             
         return self._model
 
-    def predict(self, dto: AdvertisementWithUserBase) -> Tuple[bool, float]:
+    def predict(self, dto: AdvertisementWithUserBase) -> PredictionResult:
         model = self._get_model()
         
         logger.info(f"Predict for seller_id={dto.seller_id}, item_id={dto.item_id}")
@@ -78,7 +78,7 @@ class AdvertisementMLService:
             PREDICTIONS_TOTAL.labels(result=result_label).inc()
             
             logger.info(f"Prediction result: violation={is_violation}, prob={proba:.3f}")
-            return is_violation, float(proba)
+            return PredictionResult(is_violation=is_violation, probability=float(proba))
             
         except Exception as e:
             PREDICTION_ERRORS_TOTAL.labels(error_type="prediction_error").inc()
@@ -128,7 +128,8 @@ class AdvertisementMLService:
             self._model = None
             self._model_loaded = False
             raise e
-    async def simple_predict(self, dto: AdvertisementLite) -> Tuple[bool, float]:
+
+    async def simple_predict(self, dto: AdvertisementLite) -> PredictionResult:
         try:
             advertisement = await self.advertisement_repo.get_by_id_with_user(dto.item_id)
 
@@ -143,7 +144,7 @@ class AdvertisementMLService:
             logger.error(f"Simple prediction failed: {e}")
             raise e
 
-    async def close_advertisement(self, dto: CloseAdvertisementRequest) -> bool:
+    async def close_advertisement(self, dto: CloseAdvertisementRequest) -> ActionStatus:
         logger.info(f"Service: Closing advertisement id={dto.item_id}")
         task_ids_dto = await self.moderation_repo.get_task_ids_by_item_id(dto.item_id)
 

@@ -7,12 +7,12 @@ from typing import Mapping, Any, Sequence, List, Optional
 
 from clients.postgres import get_pg_connection
 from clients.redis import get_redis_connection
-from models.advertisement import AdvertisementWithUserBase, AdvertisementInDB
+from models.advertisement import AdvertisementWithUserBase, AdvertisementInDB, ActionStatus
 from metrics import DB_QUERY_DURATION
 
 logger = logging.getLogger(__name__)
 
-@dataclass(frozen=True)
+@dataclass
 class AdvertisementPostgresStorage:
     async def create(self, seller_id: int, name: str, description: str, category: int, images_qty: int) -> Optional[Mapping[str, Any]]:
         logger.info("Creating advertisement for seller_id=%s, category=%s", seller_id, category)
@@ -85,7 +85,8 @@ class AdvertisementPostgresStorage:
         finally:
             DB_QUERY_DURATION.labels(query_type="delete").observe(time.time() - start_time)
 
-@dataclass(frozen=True)
+
+@dataclass
 class AdvertisementRedisStorage:
     _TTL: timedelta = timedelta(hours=1)
     _KEY_PREFIX: str = "advertisement:"
@@ -112,6 +113,7 @@ class AdvertisementRedisStorage:
         async with get_redis_connection() as conn:
             await conn.delete(self._key(item_id))
 
+
 @dataclass
 class AdvertisementRepository:
     storage: AdvertisementPostgresStorage = field(default_factory=AdvertisementPostgresStorage)
@@ -127,7 +129,6 @@ class AdvertisementRepository:
             images_qty=images_qty
         )
         if raw_ad:
-            await self.redis_storage.set(raw_ad["id"], raw_ad)
             return AdvertisementInDB(**raw_ad)
         return None
 
@@ -150,10 +151,10 @@ class AdvertisementRepository:
         raw_ads = await self.storage.get_all()
         return [AdvertisementInDB(**row) for row in raw_ads]
 
-    async def close(self, item_id: int) -> bool:
+    async def close(self, item_id: int) -> ActionStatus:
         logger.info("Repository: Closing advertisement id=%s", item_id)
         res = await self.storage.delete(item_id)
         if res:
             await self.redis_storage.delete(item_id)
-            return True
-        return False
+            return ActionStatus(success=True)
+        return ActionStatus(success=False)

@@ -1,24 +1,25 @@
 import jwt
-from dataclasses import dataclass
-from typing import Mapping, Any, Tuple
+from dataclasses import dataclass, field
+from typing import Mapping, Any
 from datetime import datetime, timedelta
 from contextlib import suppress
 
 from models.account import AccountModel
+from models.auth import TokenPairResponse
 from repositories.account import AccountRepository
 from repositories.auth import AuthRepository
 from errors import UserNotFoundError, UnauthorizedError, AuthorizedError
 
-@dataclass(frozen=True)
+@dataclass
 class AuthService:
-    account_repo: AccountRepository = AccountRepository()
-    auth_repo: AuthRepository = AuthRepository()
+    account_repo: AccountRepository = field(default_factory=AccountRepository)
+    auth_repo: AuthRepository = field(default_factory=AuthRepository)
     
     _SECRET = 'secret_for_token'
     _USER_TOKEN_TTL = timedelta(days=1)
     _REFRESH_USER_TOKEN_TTL = timedelta(days=7)
 
-    async def login(self, login: str, password: str) -> Tuple[str, str]:
+    async def login(self, login: str, password: str) -> TokenPairResponse:
         try:
             account = await self.account_repo.get_by_login_and_password(login, password)
             
@@ -34,18 +35,18 @@ class AuthService:
                 ttl=self._REFRESH_USER_TOKEN_TTL
             )
             
-            return user_token, refresh_token
+            return TokenPairResponse(user_token=user_token, refresh_token=refresh_token)
         except UserNotFoundError:
             raise AuthorizedError()
 
-    async def refresh_token(self, old_refresh_token: str) -> Tuple[str, str]:
-        user_id = await self.auth_repo.get_user_id_by_refresh_token(old_refresh_token)
+    async def refresh_token(self, old_refresh_token: str) -> TokenPairResponse:
+        user_id_response = await self.auth_repo.get_user_id_by_refresh_token(old_refresh_token)
         
-        if not user_id:
+        if not user_id_response.user_id:
             raise UnauthorizedError()
             
         try:
-            account = await self.account_repo.get_by_id(user_id)
+            account = await self.account_repo.get_by_id(user_id_response.user_id)
             if account.is_blocked:
                 raise UnauthorizedError()
                 
@@ -59,7 +60,7 @@ class AuthService:
                 old_refresh_token=old_refresh_token
             )
             
-            return user_token, new_refresh_token
+            return TokenPairResponse(user_token=user_token, refresh_token=new_refresh_token)
             
         except UserNotFoundError:
             raise UnauthorizedError()

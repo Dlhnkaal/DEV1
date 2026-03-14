@@ -8,45 +8,20 @@ from repositories.account import AccountRepository
 from models.advertisement import AdvertisementInDB
 from models.user import UserInDB
 from models.account import AccountModel
+from errors import UserNotFoundError
 
 pytestmark = pytest.mark.integration
 
-@pytest_asyncio.fixture(scope="function")
-async def clean_db():
-    from clients.postgres import get_pg_connection
-    async with get_pg_connection() as conn:
-        await conn.execute("TRUNCATE users, advertisements, moderation_results, account RESTART IDENTITY CASCADE")
-    yield
-
-@pytest_asyncio.fixture
-async def sample_user(clean_db):
-    repo = UserRepository()
-    user = await repo.create(
-        login="testuser",
-        password="password",
-        email="test@example.com",
-        is_verified_seller=True
-    )
-    return user
-
-@pytest_asyncio.fixture
-async def sample_advertisement(sample_user):
-    repo = AdvertisementRepository()
-    ad = await repo.create(
-        seller_id=sample_user.id,
-        name="Test Ad",
-        description="Description",
-        category=5,
-        images_qty=3
-    )
-    return ad
-
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.usefixtures("clean_db")
 class TestAdvertisementRepositoryIntegration:
     @pytest.mark.parametrize("seller_id,name,desc,category,img_qty", [
         (1, "Ad1", "Desc", 1, 1),
     ])
-    async def test_create_and_get(self, seller_id, name, desc, category, img_qty, sample_user):
+    async def test_create_and_get(self, seller_id, name, desc, category, img_qty):
+        user_repo = UserRepository()
+        # Changed "pass" to "password123" to satisfy 8 character validation
+        user = await user_repo.create("seller", "password123", "s@ex.com", True)
         repo = AdvertisementRepository()
         created = await repo.create(seller_id, name, desc, category, img_qty)
         assert created.id is not None
@@ -64,31 +39,49 @@ class TestAdvertisementRepositoryIntegration:
         (1, True),
         (999, False),
     ])
-    async def test_close(self, item_id, expected, sample_advertisement):
-        repo = AdvertisementRepository()
-        result = await repo.close(item_id if item_id == 1 else 999)
-        assert result == (item_id == 1)
+    async def test_close(self, item_id, expected):
+        user_repo = UserRepository()
+        # Changed "pass" to "password123"
+        user = await user_repo.create("seller", "password123", "s@ex.com", True)
+        ad_repo = AdvertisementRepository()
+        ad = await ad_repo.create(user.id, "Ad", "Desc", 1, 1)
+        result = await ad_repo.close(ad.id if item_id == 1 else 999)
+        assert result.success == expected
 
-@pytest.mark.asyncio
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.usefixtures("clean_db")
 class TestModerationRepositoryIntegration:
     @pytest.mark.parametrize("item_id", [1])
-    async def test_create_pending_and_get(self, item_id, sample_advertisement):
+    async def test_create_pending_and_get(self, item_id):
+        user_repo = UserRepository()
+        # Changed "pass" to "password123"
+        user = await user_repo.create("seller", "password123", "s@ex.com", True)
+        ad_repo = AdvertisementRepository()
+        ad = await ad_repo.create(user.id, "Ad", "Desc", 1, 1)
+
         repo = ModerationRepository()
-        pending = await repo.create_pending(item_id)
+        pending = await repo.create_pending(ad.id)
         assert pending.id is not None
         assert pending.status == "pending"
 
         fetched = await repo.get_result_by_id(pending.id)
         assert fetched is not None
-        assert fetched.item_id == item_id
+        assert fetched.item_id == ad.id
 
     @pytest.mark.parametrize("task_id,status,is_violation,prob,error", [
         (1, "completed", True, 0.85, None),
         (2, "failed", None, None, "error"),
     ])
-    async def test_update_result(self, task_id, status, is_violation, prob, error, sample_advertisement):
+    async def test_update_result(self, task_id, status, is_violation, prob, error):
+        user_repo = UserRepository()
+        # Changed "pass" to "password123"
+        user = await user_repo.create("seller", "password123", "s@ex.com", True)
+        ad_repo = AdvertisementRepository()
+        ad = await ad_repo.create(user.id, "Ad", "Desc", 1, 1)
+
         repo = ModerationRepository()
-        pending = await repo.create_pending(sample_advertisement.id)
+        pending = await repo.create_pending(ad.id)
         await repo.update_result(pending.id, status, is_violation, prob, error)
         updated = await repo.get_result_by_id(pending.id)
         assert updated.status == status
@@ -96,11 +89,13 @@ class TestModerationRepositoryIntegration:
         assert updated.probability == prob
         assert updated.error_message == error
 
-@pytest.mark.asyncio
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.usefixtures("clean_db")
 class TestUserRepositoryIntegration:
     @pytest.mark.parametrize("login,password,email,verified", [
-        ("user1", "pass", "u1@ex.com", False),
-        ("user2", "pass2", "u2@ex.com", True),
+        ("user1", "pass1234", "u1@ex.com", False),
+        ("user2", "pass5678", "u2@ex.com", True),
     ])
     async def test_create_and_get(self, login, password, email, verified):
         repo = UserRepository()
@@ -118,7 +113,9 @@ class TestUserRepositoryIntegration:
         fetched = await repo.get_by_id(user_id)
         assert fetched is None
 
-@pytest.mark.asyncio
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.usefixtures("clean_db")
 class TestAccountRepositoryIntegration:
     @pytest.mark.parametrize("login,password", [
         ("acc1", "12345678"),
@@ -136,14 +133,14 @@ class TestAccountRepositoryIntegration:
     @pytest.mark.parametrize("account_id", [999])
     async def test_get_by_id_not_found(self, account_id):
         repo = AccountRepository()
-        from errors import UserNotFoundError
         with pytest.raises(UserNotFoundError):
             await repo.get_by_id(account_id)
 
     @pytest.mark.parametrize("account_id", [1])
-    async def test_block(self, account_id, sample_account):
+    async def test_block(self, account_id):
         repo = AccountRepository()
-        blocked = await repo.block(account_id)
+        created = await repo.create("blockme", "12345678")
+        blocked = await repo.block(created.id)
         assert blocked.is_blocked is True
-        fetched = await repo.get_by_id(account_id)
+        fetched = await repo.get_by_id(created.id)
         assert fetched.is_blocked is True
