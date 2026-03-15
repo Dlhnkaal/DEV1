@@ -1,12 +1,3 @@
-"""
-Интеграционные тесты роутеров.
-
-Ключевые гарантии:
-- Реальные пользователи и объявления создаются в БД (фикстуры sample_user, sample_advertisement).
-- ML-сервис замокан, но Kafka-продюсер и репозитории работают с настоящими PostgreSQL и Redis.
-- Покрываются положительный (is_violation=True) и отрицательный (is_violation=False) исходы.
-- Покрываются сценарии 404, 401, 400 для каждого эндпоинта.
-"""
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
@@ -18,11 +9,6 @@ from dependencies import get_current_account
 from models.advertisement import PredictionResult
 
 pytestmark = pytest.mark.integration
-
-
-# ──────────────────────────────────────────────
-# Вспомогательные фикстуры
-# ──────────────────────────────────────────────
 
 @pytest_asyncio.fixture
 async def sample_account(clean_db):
@@ -53,40 +39,22 @@ async def sample_advertisement(sample_user):
 
 @pytest_asyncio.fixture
 async def auth_client(async_client: AsyncClient, sample_account):
-    """Клиент с переопределённой зависимостью авторизации."""
     app.dependency_overrides[get_current_account] = lambda: sample_account
     yield async_client
     app.dependency_overrides.clear()
 
 
-# ──────────────────────────────────────────────
-# /advertisement/predict
-# ──────────────────────────────────────────────
-
 @pytest.mark.asyncio(loop_scope="session")
 class TestPredictEndpointIntegration:
-    """
-    Пункты 9, 11, 12, 13:
-    - Положительный результат (is_violation=True).
-    - Отрицательный результат (is_violation=False).
-    - Работа с БД: пользователь создаётся через реальный репозиторий.
-    - Валидация входных данных.
-    - Недоступность модели → 503.
-    - Авторизация обязательна → 401.
-    """
 
     @pytest.mark.parametrize("is_violation,probability", [
-        (True,  0.9),   # Положительный результат: нарушение найдено
-        (False, 0.1),   # Отрицательный результат: нарушений нет
+        (True,  0.9), 
+        (False, 0.1),  
     ])
     async def test_predict_positive_and_negative(
             self, auth_client: AsyncClient, sample_user,
             is_violation: bool, probability: float):
-        """
-        Пользователь создаётся в реальной БД (через фикстуру sample_user).
-        Payload содержит реальный seller_id.
-        Проверяются оба возможных исхода предсказания.
-        """
+        
         app.state.ml_service.predict.return_value = PredictionResult(
             is_violation=is_violation, probability=probability
         )
@@ -107,7 +75,6 @@ class TestPredictEndpointIntegration:
         assert abs(data["probability"] - probability) < 1e-6
 
     async def test_predict_requires_auth(self, async_client: AsyncClient):
-        """Запрос без авторизации → 401."""
         response = await async_client.post(
             "/advertisement/predict",
             json={"seller_id": 1, "name": "T", "description": "d",
@@ -117,28 +84,22 @@ class TestPredictEndpointIntegration:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.parametrize("bad_payload", [
-        # seller_id ≤ 0
         {"seller_id": 0,  "name": "T", "description": "d",
          "category": 1, "images_qty": 1,  "item_id": 1, "is_verified_seller": True},
-        # images_qty > 10
         {"seller_id": 1,  "name": "T", "description": "d",
          "category": 1, "images_qty": 11, "item_id": 1, "is_verified_seller": True},
-        # item_id ≤ 0
         {"seller_id": 1,  "name": "T", "description": "d",
          "category": 1, "images_qty": 1,  "item_id": 0, "is_verified_seller": True},
-        # name пустое
         {"seller_id": 1,  "name": "",  "description": "d",
          "category": 1, "images_qty": 1,  "item_id": 1, "is_verified_seller": True},
     ])
     async def test_predict_invalid_input_returns_422(
             self, auth_client: AsyncClient, bad_payload):
-        """Пункт 13: невалидные данные → 422."""
         response = await auth_client.post("/advertisement/predict", json=bad_payload)
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     async def test_predict_model_unavailable_returns_503(
             self, auth_client: AsyncClient, sample_user):
-        """Пункт 12: если модель недоступна → сервис возвращает 503."""
         from errors import ModelNotReadyError
         app.state.ml_service.predict.side_effect = ModelNotReadyError("no model")
         payload = {
@@ -152,40 +113,23 @@ class TestPredictEndpointIntegration:
         }
         response = await auth_client.post("/advertisement/predict", json=payload)
         assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-        # Восстанавливаем mock для последующих тестов
         app.state.ml_service.predict.side_effect = None
         app.state.ml_service.predict.return_value = PredictionResult(
             is_violation=False, probability=0.1
         )
 
 
-# ──────────────────────────────────────────────
-# /advertisement/simple_predict
-# ──────────────────────────────────────────────
-
 @pytest.mark.asyncio(loop_scope="session")
 class TestSimplePredictEndpointIntegration:
-    """
-    Пункты 9, 10, 11, 12, 13:
-    - Положительный результат (is_violation=True) с реальным объявлением в БД.
-    - Отрицательный результат (is_violation=False) с реальным объявлением в БД.
-    - Объявление не существует → 404.
-    - Валидация входных данных.
-    - Недоступность модели → 503.
-    """
 
     @pytest.mark.parametrize("is_violation,probability", [
-        (True,  0.85),  # Положительный результат: нарушение найдено
-        (False, 0.15),  # Отрицательный результат: нарушений нет
+        (True,  0.85),
+        (False, 0.15),
     ])
     async def test_simple_predict_positive_and_negative(
             self, auth_client: AsyncClient, sample_advertisement,
             is_violation: bool, probability: float):
-        """
-        Пользователь и объявление создаются в реальной БД.
-        Запрос к /simple_predict использует реальный item_id из БД.
-        Проверяются оба возможных исхода предсказания.
-        """
+        
         app.state.ml_service.simple_predict.return_value = PredictionResult(
             is_violation=is_violation, probability=probability
         )
@@ -200,7 +144,6 @@ class TestSimplePredictEndpointIntegration:
 
     async def test_simple_predict_ad_not_found_returns_404(
             self, auth_client: AsyncClient, clean_db):
-        """Пункт 10: объявление с несуществующим id → 404."""
         from errors import AdvertisementNotFoundError
         app.state.ml_service.simple_predict.side_effect = AdvertisementNotFoundError(
             "Advertisement 9999 not found"
@@ -212,7 +155,6 @@ class TestSimplePredictEndpointIntegration:
         app.state.ml_service.simple_predict.side_effect = None
 
     async def test_simple_predict_requires_auth(self, async_client: AsyncClient):
-        """Запрос без авторизации → 401."""
         response = await async_client.post(
             "/advertisement/simple_predict", json={"item_id": 1}
         )
@@ -225,7 +167,6 @@ class TestSimplePredictEndpointIntegration:
     ])
     async def test_simple_predict_invalid_input_returns_422(
             self, auth_client: AsyncClient, bad_payload):
-        """Пункт 13: невалидные данные → 422."""
         response = await auth_client.post(
             "/advertisement/simple_predict", json=bad_payload
         )
@@ -233,7 +174,6 @@ class TestSimplePredictEndpointIntegration:
 
     async def test_simple_predict_model_unavailable_returns_503(
             self, auth_client: AsyncClient, sample_advertisement):
-        """Пункт 12: если модель недоступна → сервис возвращает 503."""
         from errors import ModelNotReadyError
         app.state.ml_service.simple_predict.side_effect = ModelNotReadyError()
         response = await auth_client.post(
@@ -247,16 +187,11 @@ class TestSimplePredictEndpointIntegration:
         )
 
 
-# ──────────────────────────────────────────────
-# /moderation
-# ──────────────────────────────────────────────
-
 @pytest.mark.asyncio(loop_scope="session")
 class TestModerationRouterIntegration:
 
     async def test_async_predict_accepted(
             self, auth_client: AsyncClient, sample_advertisement):
-        """Отправка запроса на асинхронную модерацию → 202."""
         response = await auth_client.post(
             "/moderation/async_predict",
             json={"item_id": sample_advertisement.id},
@@ -268,7 +203,6 @@ class TestModerationRouterIntegration:
 
     async def test_async_predict_ad_not_found(
             self, auth_client: AsyncClient, clean_db):
-        """Пункт 10: несуществующее объявление → 404."""
         response = await auth_client.post(
             "/moderation/async_predict", json={"item_id": 99999}
         )
@@ -276,7 +210,6 @@ class TestModerationRouterIntegration:
 
     async def test_get_moderation_result_pending(
             self, auth_client: AsyncClient, sample_advertisement):
-        """Созданная задача возвращается со статусом pending."""
         from repositories.moderation import ModerationRepository
         repo = ModerationRepository()
         pending = await repo.create_pending(sample_advertisement.id)
@@ -291,22 +224,15 @@ class TestModerationRouterIntegration:
 
     async def test_get_moderation_result_not_found(
             self, auth_client: AsyncClient, clean_db):
-        """Пункт 10: несуществующий task_id → 404."""
         response = await auth_client.get("/moderation/moderation_result/999")
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
-# ──────────────────────────────────────────────
-# /auth/login  (пункт 3)
-# ──────────────────────────────────────────────
-
 @pytest.mark.asyncio(loop_scope="session")
 class TestAuthRouterIntegration:
-    """Пункт 3: тесты на обработчик /login."""
 
     async def test_login_success(
             self, async_client: AsyncClient, sample_account):
-        """Корректные учётные данные → 200 + cookies с токенами."""
         response = await async_client.post(
             "/auth/login",
             json={"login": "testlogin", "password": "testpassword"},
@@ -317,7 +243,6 @@ class TestAuthRouterIntegration:
 
     async def test_login_wrong_password(
             self, async_client: AsyncClient, sample_account):
-        """Неверный пароль → 400."""
         response = await async_client.post(
             "/auth/login",
             json={"login": "testlogin", "password": "wrongpassword"},
@@ -327,7 +252,6 @@ class TestAuthRouterIntegration:
 
     async def test_login_unknown_user(
             self, async_client: AsyncClient, clean_db):
-        """Несуществующий пользователь → 400."""
         response = await async_client.post(
             "/auth/login",
             json={"login": "nobody", "password": "wrongpass"},
@@ -336,20 +260,14 @@ class TestAuthRouterIntegration:
 
     async def test_login_sets_httponly_cookies(
             self, async_client: AsyncClient, sample_account):
-        """Токены устанавливаются как httponly cookies."""
         response = await async_client.post(
             "/auth/login",
             json={"login": "testlogin", "password": "testpassword"},
         )
         assert response.status_code == status.HTTP_200_OK
-        # Оба токена должны быть в cookies
         assert "x-user-token" in response.cookies
         assert "x-refresh-token" in response.cookies
 
-
-# ──────────────────────────────────────────────
-# Обработчики ошибок
-# ──────────────────────────────────────────────
 
 @pytest.mark.asyncio(loop_scope="session")
 class TestErrorHandlersIntegration:
