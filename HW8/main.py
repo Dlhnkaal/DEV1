@@ -9,7 +9,7 @@ from services.moderation import AsyncModerationService
 
 from routers.advertisement import router as ad_router
 from routers.moderation import router as mod_router
-from routers.auth import router as auth_router 
+from routers.auth import router as auth_router
 import os
 import uvicorn
 import logging
@@ -25,6 +25,9 @@ from clients.redis import init_redis, close_redis
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from errors import UnauthorizedError, AuthorizedError
+
+from celery_app import celery_app
+from pydantic import BaseModel
 
 sentry_sdk.init(
     dsn="https://46a307ca7cdec2b541bbdeeeef29968d@o4511005189210112.ingest.de.sentry.io/4511008883015760",
@@ -85,9 +88,42 @@ async def root() -> Dict[str, str]:
 
 app.include_router(ad_router, prefix="/advertisement", tags=["Advertisement"])
 app.include_router(mod_router, prefix="/moderation", tags=["Moderation"])
-app.include_router(auth_router, prefix="/auth", tags=["Auth"]) 
+app.include_router(auth_router, prefix="/auth", tags=["Auth"])
 
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+
+class AddIn(BaseModel):
+    a: int
+    b: int
+    delay_s: float = 2.0
+
+
+class FlakyIn(BaseModel):
+    p_fail: float = 0.5
+
+
+@app.post("/celery/add", tags=["Celery"])
+async def celery_add(inp: AddIn):
+    task = celery_app.send_task("workers.tasks.slow_add", args=[inp.a, inp.b], kwargs={"delay_s": inp.delay_s})
+    return {"task_id": task.id}
+
+
+@app.post("/celery/flaky", tags=["Celery"])
+async def celery_flaky(inp: FlakyIn):
+    task = celery_app.send_task("workers.tasks.flaky", kwargs={"p_fail": inp.p_fail})
+    return {"task_id": task.id}
+
+
+@app.get("/celery/tasks/{task_id}", tags=["Celery"])
+async def celery_task_status(task_id: str):
+    res = celery_app.AsyncResult(task_id)
+    payload = {"task_id": task_id, "state": res.state}
+    if res.successful():
+        payload["result"] = res.result
+    elif res.failed():
+        payload["error"] = str(res.result)
+    return payload
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

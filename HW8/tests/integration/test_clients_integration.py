@@ -46,7 +46,7 @@ class TestPostgresClient:
             )
             assert result is True, f"Index '{index_name}' not found"
 
-    async def test_updated_at_trigger(self):
+    async def test_updated_at_trigger(self, clean_db):
         unique = f"trigger_test_{int(time.time() * 1000)}"
         async with get_pg_connection() as conn:
             row = await conn.fetchrow(
@@ -70,7 +70,7 @@ class TestPostgresClient:
 
             await conn.execute("DELETE FROM users WHERE id = $1", user_id)
 
-    async def test_foreign_key_cascade_delete(self):
+    async def test_foreign_key_cascade_delete(self, clean_db):
         unique = f"cascade_{int(time.time() * 1000)}"
         user_id = None
 

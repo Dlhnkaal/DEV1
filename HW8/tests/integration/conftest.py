@@ -11,22 +11,56 @@ from main import app as real_app
 from dependencies import get_current_account
 from models.account import AccountModel
 from clients.postgres import init_pg_pool, close_pg_pool, get_pg_connection
-from clients.redis import init_redis, close_redis, redis_client as get_redis_client
+from clients.redis import init_redis, close_redis
 
 _LOCAL_DB_URL = "postgresql://postgres:123456@localhost:5435/advertisement_db"
 
 
+def _check_infra_available() -> str | None:
+    import socket
+
+    checks = [
+        ("localhost", 5435, "PostgreSQL"),
+        ("localhost", 6379, "Redis"),
+        ("localhost", 9092, "Kafka"),
+    ]
+    missing = []
+    for host, port, name in checks:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            if s.connect_ex((host, port)) != 0:
+                missing.append(f"{name} ({host}:{port})")
+
+    if missing:
+        return f"Infrastructure unavailable: {', '.join(missing)}"
+    return None
+
+
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def initialize_clients():
+    reason = _check_infra_available()
+    if reason:
+        pytest.skip(reason)
+
     os.environ["DB_HOST"] = "localhost"
     os.environ["DB_PORT"] = "5435"
     os.environ["REDIS_HOST"] = "localhost"
     os.environ["REDIS_PORT"] = "6379"
     os.environ["KAFKA_BOOTSTRAP"] = "localhost:9092"
 
-    await init_pg_pool()
-    await init_redis()
+    try:
+        await init_pg_pool()
+    except Exception as e:
+        pytest.skip(f"Failed to connect to PostgreSQL: {e}")
+
+    try:
+        await init_redis()
+    except Exception as e:
+        await close_pg_pool()
+        pytest.skip(f"Failed to connect to Redis: {e}")
+
     yield
+
     await close_pg_pool()
     await close_redis()
 
@@ -129,20 +163,9 @@ async def async_client(app: FastAPI, initialize_clients) -> AsyncGenerator:
     mock_ml = AsyncMock(spec=AdvertisementMLService)
     mock_ml.predict = AsyncMock(return_value=PredictionResult(is_violation=False, probability=0.1))
     mock_ml.close_advertisement = AsyncMock(return_value=ActionStatus(success=True))
-
-
-    async def _simple_predict(dto):
-        from repositories.advertisement import AdvertisementRepository
-        repo = AdvertisementRepository()
-        ad = await repo.get_by_id_with_user(dto.item_id)
-        if ad is None:
-            raise AdvertisementNotFoundError(f"Advertisement {dto.item_id} not found")
-        return PredictionResult(is_violation=False, probability=0.1)
-
-    mock_ml.simple_predict = AsyncMock(side_effect=_simple_predict)
+    mock_ml.simple_predict = AsyncMock(return_value=PredictionResult(is_violation=False, probability=0.1))
     app.state.ml_service = mock_ml
 
-    # Реальный сервис модерации, только Kafka замокана
     moderation_service = AsyncModerationService()
     moderation_service.producer = AsyncMock()
     moderation_service.producer.send_moderation_request = AsyncMock()

@@ -1,11 +1,3 @@
-"""
-Юнит-тесты сервисов.
-
-Пункт 1  - Юнит-тесты для работы БЛ авторизации (TestAuthService).
-Пункт 12 - Если сервису не удалось загрузить модель → ModelNotReadyError → 503.
-Пункт 14 - Все тесты работают без запущенных PostgreSQL и Redis:
-           хранилища и Kafka замоканы, ASGITransport не запускает lifespan.
-"""
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta
@@ -24,10 +16,6 @@ from models.moderation import AsyncPredictRequest, AsyncTaskStatusRequest
 from models.auth import TokenPairResponse
 
 
-# ══════════════════════════════════════════════════════
-# AdvertisementMLService — predict
-# ══════════════════════════════════════════════════════
-
 class TestAdvertisementMLServicePredict:
 
     def _dto(self, is_verified_seller=True) -> AdvertisementWithUserBase:
@@ -38,12 +26,11 @@ class TestAdvertisementMLServicePredict:
         )
 
     @pytest.mark.parametrize("proba,expected_violation", [
-        (0.9,  True),   # Положительный результат
-        (0.2,  False),  # Отрицательный результат
-        (0.5,  False),  # Граничное значение: 0.5 → нет нарушения
+        (0.9,  True),
+        (0.2,  False),
+        (0.5,  False),
     ])
     async def test_predict_violation_flag(self, proba, expected_violation):
-        """Пункт 11: is_violation=True/False в зависимости от вероятности."""
         service = AdvertisementMLService()
         mock_model = MagicMock()
         mock_model.predict_proba.return_value = [[1 - proba, proba]]
@@ -56,19 +43,12 @@ class TestAdvertisementMLServicePredict:
         assert abs(result.probability - proba) < 1e-6
 
     async def test_predict_model_not_ready_raises(self):
-        """_get_model поднимает ModelNotReadyError → predict пробрасывает его."""
         service = AdvertisementMLService()
         with patch.object(service, '_get_model', side_effect=ModelNotReadyError("no model")):
             with pytest.raises(ModelNotReadyError):
                 await service.predict(self._dto())
 
-    # ── Пункт 12: цепочка «загрузка не удалась → модель недоступна → 503» ──
-
     def test_load_model_failure_sets_model_to_none(self):
-        """
-        Пункт 12 (шаг 1): _load_model поднимает исключение →
-        self._model остаётся None, _model_loaded = False.
-        """
         service = AdvertisementMLService()
         with patch('services.advertisement.os.path.exists', return_value=True), \
              patch('services.advertisement.load_model',
@@ -80,25 +60,14 @@ class TestAdvertisementMLServicePredict:
         assert service._model_loaded is False
 
     def test_get_model_raises_model_not_ready_when_model_stays_none(self):
-        """
-        Пункт 12 (шаг 2): если _load_model завершился без исключения, но
-        self._model так и остался None (нестандартная ситуация), _get_model
-        поднимает ModelNotReadyError, которую роутер перехватит как 503.
-        """
         service = AdvertisementMLService()
         service._model = None
 
-        # _load_model вернулся нормально, но не выставил self._model
         with patch.object(service, '_load_model', return_value=None):
             with pytest.raises(ModelNotReadyError):
                 service._get_model()
 
     async def test_predict_propagates_model_not_ready_for_503(self):
-        """
-        Пункт 12 (шаг 3, сквозной): ModelNotReadyError из _get_model
-        пробрасывается из predict — роутер перехватит её и вернёт 503.
-        Сам HTTP-ответ проверяется в test_routers.py и test_routers_integration.py.
-        """
         service = AdvertisementMLService()
         service._model = None
 
@@ -107,10 +76,6 @@ class TestAdvertisementMLServicePredict:
                 await service.predict(self._dto())
 
     def test_load_model_trains_when_file_missing(self):
-        """
-        train_model/save_model импортируются ВНУТРИ _load_model через
-        `from ml.model import ...`, поэтому патчим в исходном модуле ml.model.
-        """
         service = AdvertisementMLService()
         mock_model = MagicMock()
 
@@ -122,10 +87,6 @@ class TestAdvertisementMLServicePredict:
         mock_train.assert_called_once()
         assert service._model is mock_model
 
-
-# ══════════════════════════════════════════════════════
-# AdvertisementMLService — simple_predict и close
-# ══════════════════════════════════════════════════════
 
 class TestAdvertisementMLServiceSimplePredict:
 
@@ -151,7 +112,6 @@ class TestAdvertisementMLServiceSimplePredict:
         mock_predict.assert_awaited_once_with(mock_ad)
 
     async def test_simple_predict_advertisement_not_found(self):
-        """Пункт 10: объявление не найдено → AdvertisementNotFoundError."""
         service = AdvertisementMLService()
         with patch.object(service.advertisement_repo, 'get_by_id_with_user',
                           new=AsyncMock(return_value=None)):
@@ -185,12 +145,7 @@ class TestAdvertisementMLServiceSimplePredict:
         service.moderation_repo.delete_cache.assert_any_call(11)
 
 
-# ══════════════════════════════════════════════════════
-# AuthService (пункт 1)
-# ══════════════════════════════════════════════════════
-
 class TestAuthService:
-    """Пункт 1: юнит-тесты для работы БЛ авторизации."""
 
     @pytest.mark.parametrize("login,password,account,expected_exception", [
         ("user",    "pass", MagicMock(id=1, is_blocked=False), None),
@@ -276,10 +231,6 @@ class TestAuthService:
                 with pytest.raises(expected):
                     await service.verify(token)
 
-
-# ══════════════════════════════════════════════════════
-# AsyncModerationService
-# ══════════════════════════════════════════════════════
 
 class TestModerationService:
 

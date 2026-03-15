@@ -16,7 +16,8 @@ redis
 python-dotenv
 prometheus-client
 prometheus-fastapi-instrumentator
-sentry-sdk[fastapi] 
+sentry-sdk[fastapi]
 pyjwt
 aioredis
 testcontainers[postgres,redis,kafka]
+celery[redis]

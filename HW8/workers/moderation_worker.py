@@ -15,6 +15,7 @@ from clients.kafka import ModerationProducer
 from errors import AdvertisementNotFoundError
 
 from clients.postgres import init_pg_pool, close_pg_pool
+from clients.redis import init_redis, close_redis 
 
 load_dotenv()
 
@@ -40,6 +41,7 @@ class ModerationWorker:
 
     async def start(self):
         await init_pg_pool()
+        await init_redis()
         self.ml_service._load_model()
         logger.info("ML Model loaded")
 
@@ -60,6 +62,7 @@ class ModerationWorker:
             await self.consumer.stop()
         if self.dlq_producer:
             await self.dlq_producer.stop()
+        await close_redis() 
         await close_pg_pool()
         logger.info("Worker stopped")
 
@@ -111,7 +114,6 @@ class ModerationWorker:
                 for attempt in range(1, self.MAX_RETRIES + 1):
                     try:
                         adv_lite = AdvertisementLite(item_id=item_id)
-                        # simple_predict returns PredictionResult — unpack by attribute
                         result = await self.ml_service.simple_predict(adv_lite)
                         is_violation = result.is_violation
                         proba = result.probability
@@ -129,7 +131,7 @@ class ModerationWorker:
                         break
 
                     except AdvertisementNotFoundError as e:
-                        logger.error(f"Logical error (no retry): {e}")
+                        logger.error(f"Logical error: {e}")
                         await self.process_dlq(data, str(e), attempt)
                         success = True
                         break
@@ -139,7 +141,7 @@ class ModerationWorker:
 
                         if attempt < self.MAX_RETRIES:
                             delay = min(self.RETRY_DELAY * (2 ** (attempt - 1)), self.MAX_RETRY_DELAY)
-                            logger.info(f"Retrying in {delay:.2f} seconds... (attempt {attempt})")
+                            logger.info(f"Retrying in {delay:.2f} seconds... attempt {attempt}")
                             await asyncio.sleep(delay)
                         else:
                             await self.process_dlq(data, str(e), attempt)
@@ -148,7 +150,7 @@ class ModerationWorker:
                 if success:
                     await self.consumer.commit()
                 else:
-                    logger.critical(f"Task {task_id} failed catastrophically. Committing to skip.")
+                    logger.critical(f"Task {task_id} failed")
                     await self.consumer.commit()
 
         finally:
