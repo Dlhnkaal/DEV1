@@ -24,3 +24,6 @@ docker-compose logs -f worker
 
 # Нагрузка сервиса 
 .\load_test.ps1
+
+# Запуск тестов
+python -m pytest

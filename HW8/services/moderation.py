@@ -11,6 +11,7 @@ from models.moderation import (
 )
 from errors import AdvertisementNotFoundError, ModerationTaskNotFoundError
 
+
 logger = logging.getLogger(__name__)
 
 class AsyncModerationService:
@@ -38,13 +39,12 @@ class AsyncModerationService:
             await self.producer.send_moderation_request(task_id, item_id)
         except Exception as e:
             logger.error(f"Failed to send moderation request for task {task_id}: {e}")
-            update_dto = ModerationResultUpdate(
-                status="failed",
-                error_message=f"Kafka error: {str(e)}"
-            )
             await self.repo.update_result(
-                dto=AsyncTaskStatusRequest(task_id=task_id),
-                update_data=update_dto
+                task_id=task_id,
+                status="failed",
+                is_violation=None,
+                probability=None,
+                error_message=f"Kafka error: {str(e)}"
             )
             raise
 

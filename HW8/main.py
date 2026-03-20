@@ -30,10 +30,10 @@ from celery_app import celery_app
 from pydantic import BaseModel
 
 sentry_sdk.init(
-    dsn="https://46a307ca7cdec2b541bbdeeeef29968d@o4511005189210112.ingest.de.sentry.io/4511008883015760",
-    traces_sample_rate=1.0,
+    dsn=os.getenv("SENTRY_DSN"),
+    traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "1.0")),
     send_default_pii=True,
-    environment="development",
+    environment=os.getenv("SENTRY_ENVIRONMENT", "development"),
 )
 
 logging.basicConfig(level=logging.INFO)

@@ -12,12 +12,11 @@ alembic
 asyncpg
 pgmigrate
 aiokafka
-redis
+redis[asyncio]
 python-dotenv
 prometheus-client
 prometheus-fastapi-instrumentator
 sentry-sdk[fastapi]
 pyjwt
-aioredis
 testcontainers[postgres,redis,kafka]
-celery[redis]
+celery[redis]>=5.3.0

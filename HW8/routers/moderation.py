@@ -1,5 +1,6 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
+import sentry_sdk
 from models.moderation import (
     AsyncPredictRequest, 
     AsyncTaskStatusRequest,
@@ -28,8 +29,10 @@ async def async_predict(
         )
         
     except AdvertisementNotFoundError as e:
+        sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
+        sentry_sdk.capture_exception(e)
         logger.exception(f"Failed to start moderation for item {dto.item_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
@@ -53,8 +56,10 @@ async def get_moderation_result(
         )
         
     except ModerationTaskNotFoundError as e:
+        sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
+        sentry_sdk.capture_exception(e)
         logger.exception(f"Failed to get status for task {dto.task_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
