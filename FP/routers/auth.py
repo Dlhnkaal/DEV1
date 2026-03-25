@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Response, Request
 from pydantic import BaseModel
 from dependencies import AuthServiceDepend
-from errors import UnauthorizedError
+from errors import UnAuthorizedError
 
 
 router = APIRouter()
@@ -34,7 +34,7 @@ async def refresh_handler(
 ):
     old_refresh_token = request.cookies.get('x-refresh-token')
     if not old_refresh_token:
-        raise UnauthorizedError()
+        raise UnAuthorizedError()
         
     token_response = await auth_service.refresh_token(old_refresh_token)
     

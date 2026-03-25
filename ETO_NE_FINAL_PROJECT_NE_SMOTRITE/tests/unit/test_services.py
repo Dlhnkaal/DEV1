@@ -7,7 +7,7 @@ from services.auth import AuthService
 from services.moderation import AsyncModerationService
 from errors import (
     AdvertisementNotFoundError, ModerationTaskNotFoundError, ModelNotReadyError,
-    UnauthorizedError, AuthorizedError, UserNotFoundError
+    UnAuthorizedError, AuthenticationError, UserNotFoundError
 )
 from models.advertisement import (
     AdvertisementLite, AdvertisementWithUserBase, PredictionResult, ActionStatus
@@ -149,8 +149,8 @@ class TestAuthService:
 
     @pytest.mark.parametrize("login,password,account,expected_exception", [
         ("user",    "pass", MagicMock(id=1, is_blocked=False), None),
-        ("user",    "wrong", None,                              AuthorizedError),
-        ("blocked", "pass", MagicMock(id=2, is_blocked=True),  AuthorizedError),
+        ("user",    "wrong", None,                              AuthenticationError),
+        ("blocked", "pass", MagicMock(id=2, is_blocked=True),  AuthenticationError),
     ])
     async def test_login(self, login, password, account, expected_exception):
         with patch("services.auth.AccountRepository.get_by_login_and_password",
@@ -174,8 +174,8 @@ class TestAuthService:
 
     @pytest.mark.parametrize("old_token,user_id,account,expected_exception", [
         ("valid",   1,    MagicMock(id=1, is_blocked=False), None),
-        ("expired", None, None,                               UnauthorizedError),
-        ("valid",   2,    MagicMock(id=2, is_blocked=True),  UnauthorizedError),
+        ("expired", None, None,                               UnAuthorizedError),
+        ("valid",   2,    MagicMock(id=2, is_blocked=True),  UnAuthorizedError),
     ])
     async def test_refresh_token(self, old_token, user_id, account, expected_exception):
         from models.auth import UserIdResponse
@@ -190,7 +190,7 @@ class TestAuthService:
             service._build_refresh_token = MagicMock(return_value="new_refresh")
 
             if expected_exception:
-                with pytest.raises(UnauthorizedError):
+                with pytest.raises(UnAuthorizedError):
                     await service.refresh_token(old_token)
             else:
                 result = await service.refresh_token(old_token)
@@ -209,14 +209,14 @@ class TestAuthService:
             "expired",
             {"user_id": 1, "expired_at": (datetime.now() - timedelta(hours=1)).isoformat()},
             None,
-            UnauthorizedError,
+            UnAuthorizedError,
         ),
-        ("bad", {}, None, UnauthorizedError),
+        ("bad", {}, None, UnAuthorizedError),
         (
             "blocked",
             {"user_id": 1, "expired_at": (datetime.now() + timedelta(hours=1)).isoformat()},
             MagicMock(id=1, is_blocked=True),
-            UnauthorizedError,
+            UnAuthorizedError,
         ),
     ])
     async def test_verify(self, token, payload, account, expected):

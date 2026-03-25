@@ -8,7 +8,7 @@ from models.account import AccountModel
 from models.auth import TokenPairResponse
 from repositories.account import AccountRepository
 from repositories.auth import AuthRepository
-from errors import UserNotFoundError, UnauthorizedError, AuthorizedError
+from errors import UserNotFoundError, UnAuthorizedError, AuthenticationError
 
 @dataclass
 class AuthService:
@@ -24,7 +24,7 @@ class AuthService:
             account = await self.account_repo.get_by_login_and_password(login, password)
             
             if account.is_blocked:
-                raise AuthorizedError()
+                raise AuthenticationError()
             
             user_token = self._build_user_token(account)
             refresh_token = self._build_refresh_token(account)
@@ -37,18 +37,18 @@ class AuthService:
             
             return TokenPairResponse(user_token=user_token, refresh_token=refresh_token)
         except UserNotFoundError:
-            raise AuthorizedError()
+            raise AuthenticationError()
 
     async def refresh_token(self, old_refresh_token: str) -> TokenPairResponse:
         user_id_response = await self.auth_repo.get_user_id_by_refresh_token(old_refresh_token)
         
         if not user_id_response.user_id:
-            raise UnauthorizedError()
+            raise UnAuthorizedError()
             
         try:
             account = await self.account_repo.get_by_id(user_id_response.user_id)
             if account.is_blocked:
-                raise UnauthorizedError()
+                raise UnAuthorizedError()
                 
             user_token = self._build_user_token(account)
             new_refresh_token = self._build_refresh_token(account)
@@ -63,27 +63,29 @@ class AuthService:
             return TokenPairResponse(user_token=user_token, refresh_token=new_refresh_token)
             
         except UserNotFoundError:
-            raise UnauthorizedError()
+            raise UnAuthorizedError()
 
     async def verify(self, user_token: str) -> AccountModel:
         user_payload = {}
-        with suppress(Exception):
+        try:
             user_payload = self._parse_token(user_token)
+        except jwt.InvalidTokenError:
+            pass
 
         if raw_expired_at := user_payload.get('expired_at', None):
             if datetime.fromisoformat(raw_expired_at) < datetime.now():
-                raise UnauthorizedError()
+                raise UnAuthorizedError()
 
         if account_id := user_payload.get('user_id', None):
             try:
                 account = await self.account_repo.get_by_id(account_id)
                 if account.is_blocked:
-                    raise UnauthorizedError()
+                    raise UnAuthorizedError()
                 return account
             except UserNotFoundError:
-                raise UnauthorizedError()
+                raise UnAuthorizedError()
 
-        raise UnauthorizedError()
+        raise UnAuthorizedError()
 
     def _build_user_token(self, account: AccountModel) -> str:
         user_payload = dict(

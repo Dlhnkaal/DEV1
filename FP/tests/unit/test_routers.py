@@ -5,8 +5,8 @@ from fastapi import status
 
 from errors import (
     AdvertisementNotFoundError,
-    AuthorizedError,
-    UnauthorizedError,
+    AuthenticationError,
+    UnAuthorizedError,
     ModerationTaskNotFoundError,
     ModelNotReadyError,
 )
@@ -184,7 +184,7 @@ class TestAuthRouter:
 
     @pytest.mark.parametrize("login,password,side_effect,expected_status", [
         ("user", "pass", None, 200),
-        ("user", "wrong", AuthorizedError(), 400),
+        ("user", "wrong", AuthenticationError(), 400),
     ])
     async def test_login(self, async_client: AsyncClient, app, login, password,
                          side_effect, expected_status):
@@ -207,7 +207,7 @@ class TestAuthRouter:
     @pytest.mark.parametrize("cookies,side_effect,expected_status", [
         ({"x-refresh-token": "old"}, None, 200),
         ({}, None, 401),
-        ({"x-refresh-token": "bad"}, UnauthorizedError(), 401),
+        ({"x-refresh-token": "bad"}, UnAuthorizedError(), 401),
     ])
     async def test_refresh(self, async_client: AsyncClient, app,
                            cookies, side_effect, expected_status):

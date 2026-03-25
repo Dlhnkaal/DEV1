@@ -80,7 +80,7 @@ async def run_migrations(initialize_clients):
 
 
 @pytest_asyncio.fixture
-async def clean_db(initialize_clients, run_migrations):
+async def clean_db(initialize_clients):
     async with get_pg_connection() as conn:
         await conn.execute(
             "TRUNCATE moderation_results, advertisements, users, account "

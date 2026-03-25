@@ -8,8 +8,8 @@ from errors import (
     UserNotFoundError,
     ModerationTaskNotFoundError,
     ModelNotReadyError,
-    UnauthorizedError,
-    AuthorizedError,
+    UnAuthorizedError,
+    AuthenticationError,
 )
 from models.account import AccountModel
 
@@ -21,8 +21,8 @@ class TestExceptionClasses:
         UserNotFoundError,
         ModerationTaskNotFoundError,
         ModelNotReadyError,
-        UnauthorizedError,
-        AuthorizedError,
+        UnAuthorizedError,
+        AuthenticationError,
     ])
     def test_is_exception_subclass(self, exc_class):
         assert issubclass(exc_class, Exception)
@@ -32,8 +32,8 @@ class TestExceptionClasses:
         (UserNotFoundError, "User 7 not found"),
         (ModerationTaskNotFoundError, "Task 3 not found"),
         (ModelNotReadyError, "Model not loaded"),
-        (UnauthorizedError, "Not authorized"),
-        (AuthorizedError, "Bad credentials"),
+        (UnAuthorizedError, "Not authorized"),
+        (AuthenticationError, "Bad credentials"),
     ])
     def test_can_be_raised_and_caught(self, exc_class, message):
         with pytest.raises(exc_class, match=message):
@@ -84,7 +84,7 @@ class TestUserNotFoundError:
         service = AuthService()
         with patch("services.auth.AccountRepository.get_by_login_and_password",
                    new=AsyncMock(side_effect=UserNotFoundError("User not found"))):
-            with pytest.raises(AuthorizedError):
+            with pytest.raises(AuthenticationError):
                 await service.login("ghost", "pass")
 
     async def test_auth_service_verify_converts_user_not_found_to_unauthorized(self):
@@ -97,7 +97,7 @@ class TestUserNotFoundError:
              patch("services.auth.AccountRepository.get_by_id",
                    new=AsyncMock(side_effect=UserNotFoundError("User not found"))):
             service = AuthService()
-            with pytest.raises(UnauthorizedError):
+            with pytest.raises(UnAuthorizedError):
                 await service.verify("any_token")
 
 
@@ -140,7 +140,7 @@ class TestExceptionHandlers:
         from dependencies import get_current_account
 
         async def _raise_unauthorized():
-            raise UnauthorizedError()
+            raise UnAuthorizedError()
 
         app.dependency_overrides[get_current_account] = _raise_unauthorized
 
@@ -156,7 +156,7 @@ class TestExceptionHandlers:
             self, async_client: AsyncClient, app):
         from dependencies import auth_service
         mock_svc = AsyncMock()
-        mock_svc.login.side_effect = AuthorizedError()
+        mock_svc.login.side_effect = AuthenticationError()
         app.dependency_overrides[auth_service] = lambda: mock_svc
 
         response = await async_client.post(
@@ -179,7 +179,7 @@ class TestExceptionHandlers:
         from dependencies import get_current_account
 
         async def _raise_unauthorized():
-            raise UnauthorizedError()
+            raise UnAuthorizedError()
 
         app.dependency_overrides[get_current_account] = _raise_unauthorized
 
@@ -195,7 +195,7 @@ class TestExceptionHandlers:
             self, async_client: AsyncClient, app):
         from dependencies import auth_service
         mock_svc = AsyncMock()
-        mock_svc.login.side_effect = AuthorizedError()
+        mock_svc.login.side_effect = AuthenticationError()
         app.dependency_overrides[auth_service] = lambda: mock_svc
 
         response = await async_client.post(

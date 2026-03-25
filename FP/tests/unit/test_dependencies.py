@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi import Request
 from dependencies import get_current_account, get_ml_service, get_moderation_service
 from models.account import AccountModel
-from errors import UnauthorizedError
+from errors import UnAuthorizedError
 
 
 def _mock_request(cookie_value=None) -> MagicMock:
@@ -19,7 +19,7 @@ class TestGetCurrentAccount:
         req = _mock_request(cookie_value=None)
         auth_srv = AsyncMock()
 
-        with pytest.raises(UnauthorizedError):
+        with pytest.raises(UnAuthorizedError):
             await get_current_account(req, auth_srv)
 
         auth_srv.verify.assert_not_called()
@@ -28,9 +28,9 @@ class TestGetCurrentAccount:
     async def test_invalid_token_raises_unauthorized(self, token):
         req = _mock_request(cookie_value=token)
         auth_srv = AsyncMock()
-        auth_srv.verify.side_effect = UnauthorizedError()
+        auth_srv.verify.side_effect = UnAuthorizedError()
 
-        with pytest.raises(UnauthorizedError):
+        with pytest.raises(UnAuthorizedError):
             await get_current_account(req, auth_srv)
 
         auth_srv.verify.assert_awaited_once_with(token)
@@ -49,9 +49,9 @@ class TestGetCurrentAccount:
     async def test_blocked_account_raises_unauthorized(self):
         req = _mock_request(cookie_value="blocked_token")
         auth_srv = AsyncMock()
-        auth_srv.verify.side_effect = UnauthorizedError()
+        auth_srv.verify.side_effect = UnAuthorizedError()
 
-        with pytest.raises(UnauthorizedError):
+        with pytest.raises(UnAuthorizedError):
             await get_current_account(req, auth_srv)
 
 

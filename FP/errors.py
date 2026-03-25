@@ -10,8 +10,8 @@ class ModerationTaskNotFoundError(Exception):
 class ModelNotReadyError(Exception):
     pass
 
-class UnauthorizedError(Exception):
+class UnAuthorizedError(Exception):
     pass
 
-class AuthorizedError(Exception):
+class AuthenticationError(Exception):
     pass

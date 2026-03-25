@@ -9,7 +9,7 @@ from services.moderation import AsyncModerationService
 
 from routers.advertisement import router as ad_router
 from routers.moderation import router as mod_router
-from routers.auth import router as auth_router
+from routers.auth import router as auth_router 
 import os
 import uvicorn
 import logging
@@ -24,16 +24,13 @@ from clients.postgres import init_pg_pool, close_pg_pool
 from clients.redis import init_redis, close_redis
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from errors import UnauthorizedError, AuthorizedError
-
-from celery_app import celery_app
-from pydantic import BaseModel
+from errors import UnAuthorizedError, AuthenticationError
 
 sentry_sdk.init(
-    dsn=os.getenv("SENTRY_DSN"),
-    traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "1.0")),
+    dsn="https://46a307ca7cdec2b541bbdeeeef29968d@o4511005189210112.ingest.de.sentry.io/4511008883015760",
+    traces_sample_rate=1.0,
     send_default_pii=True,
-    environment=os.getenv("SENTRY_ENVIRONMENT", "development"),
+    environment="development",
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -68,15 +65,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(title="Ad Moderation ML API", version="1.0.0", lifespan=lifespan)
 
-@app.exception_handler(UnauthorizedError)
-async def unauthorized_error_handler(request: Request, _: UnauthorizedError):
+@app.exception_handler(UnAuthorizedError)
+async def unauthorized_error_handler(request: Request, _: UnAuthorizedError):
     return JSONResponse(
         status_code=HTTPStatus.UNAUTHORIZED,
         content={"message": "User not authorized"},
     )
 
-@app.exception_handler(AuthorizedError)
-async def authorized_error_handler(request: Request, _: AuthorizedError):
+@app.exception_handler(AuthenticationError)
+async def authorized_error_handler(request: Request, _: AuthenticationError):
     return JSONResponse(
         status_code=HTTPStatus.BAD_REQUEST,
         content={"message": "Login or password is not corrected"},
@@ -88,42 +85,9 @@ async def root() -> Dict[str, str]:
 
 app.include_router(ad_router, prefix="/advertisement", tags=["Advertisement"])
 app.include_router(mod_router, prefix="/moderation", tags=["Moderation"])
-app.include_router(auth_router, prefix="/auth", tags=["Auth"])
+app.include_router(auth_router, prefix="/auth", tags=["Auth"]) 
 
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
-
-class AddIn(BaseModel):
-    a: int
-    b: int
-    delay_s: float = 2.0
-
-
-class FlakyIn(BaseModel):
-    p_fail: float = 0.5
-
-
-@app.post("/celery/add", tags=["Celery"])
-async def celery_add(inp: AddIn):
-    task = celery_app.send_task("workers.tasks.slow_add", args=[inp.a, inp.b], kwargs={"delay_s": inp.delay_s})
-    return {"task_id": task.id}
-
-
-@app.post("/celery/flaky", tags=["Celery"])
-async def celery_flaky(inp: FlakyIn):
-    task = celery_app.send_task("workers.tasks.flaky", kwargs={"p_fail": inp.p_fail})
-    return {"task_id": task.id}
-
-
-@app.get("/celery/tasks/{task_id}", tags=["Celery"])
-async def celery_task_status(task_id: str):
-    res = celery_app.AsyncResult(task_id)
-    payload = {"task_id": task_id, "state": res.state}
-    if res.successful():
-        payload["result"] = res.result
-    elif res.failed():
-        payload["error"] = str(res.result)
-    return payload
-
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
