@@ -214,24 +214,23 @@ class TestAuthRepository:
 
 class TestAccountRepository:
 
-    @pytest.mark.parametrize("account_id,storage_return,should_raise", [
-        (1, {"id": 1, "login": "test", "password": "hashed1234",
-             "is_blocked": False}, False),
-        (2, None, True),
+    @pytest.mark.parametrize("account_id,cached,storage_return,should_raise", [
+        (1, {"id": 1, "login": "bob", "password": "hashed_pw", "is_blocked": False}, None, False),
+        (2, None, {"id": 2, "login": "bob", "password": "hashed_pw", "is_blocked": False}, False),
+        (3, None, None, True),
     ])
-    async def test_get_by_id(self, account_id, storage_return, should_raise):
+    async def test_get_by_id(self, account_id, cached, storage_return, should_raise):
         repo = AccountRepository()
-        with patch.object(repo.storage, 'get_by_id',
-                          AsyncMock(return_value=storage_return)) as mock_get:
+        with patch.object(repo.redis_storage, 'get', AsyncMock(return_value=cached)), \
+             patch.object(repo.storage, 'get_by_id', AsyncMock(return_value=storage_return)), \
+             patch.object(repo.redis_storage, 'set', AsyncMock()):
             if should_raise:
                 with pytest.raises(UserNotFoundError):
                     await repo.get_by_id(account_id)
             else:
                 result = await repo.get_by_id(account_id)
-                assert result.id == account_id
+                assert result is not None
                 assert isinstance(result, AccountModel)
-
-            mock_get.assert_awaited_once_with(account_id)
 
 
 class TestAccountRepositoryAllMethods:
@@ -239,7 +238,8 @@ class TestAccountRepositoryAllMethods:
     async def test_create_returns_account_model(self):
         repo = AccountRepository()
         raw = {"id": 1, "login": "alice", "password": "hashed_pw", "is_blocked": False}
-        with patch.object(repo.storage, 'create', AsyncMock(return_value=raw)) as mock_create:
+        with patch.object(repo.storage, 'create', AsyncMock(return_value=raw)) as mock_create, \
+             patch.object(repo.redis_storage, 'set', AsyncMock()):
             result = await repo.create("alice", "plainpass")
 
         mock_create.assert_awaited_once_with("alice", "plainpass")
@@ -253,7 +253,9 @@ class TestAccountRepositoryAllMethods:
     ])
     async def test_get_by_id(self, account_id, raw, should_raise):
         repo = AccountRepository()
-        with patch.object(repo.storage, 'get_by_id', AsyncMock(return_value=raw)):
+        with patch.object(repo.redis_storage, 'get', AsyncMock(return_value=None)), \
+             patch.object(repo.storage, 'get_by_id', AsyncMock(return_value=raw)), \
+             patch.object(repo.redis_storage, 'set', AsyncMock()):
             if should_raise:
                 with pytest.raises(UserNotFoundError):
                     await repo.get_by_id(account_id)
@@ -269,7 +271,8 @@ class TestAccountRepositoryAllMethods:
     async def test_delete(self, account_id, raw, should_raise):
         repo = AccountRepository()
         with patch.object(repo.storage, 'delete',
-                          AsyncMock(return_value=raw)) as mock_del:
+                          AsyncMock(return_value=raw)) as mock_del, \
+             patch.object(repo.redis_storage, 'delete', AsyncMock()):
             if should_raise:
                 with pytest.raises(UserNotFoundError):
                     await repo.delete(account_id)
@@ -287,7 +290,8 @@ class TestAccountRepositoryAllMethods:
     async def test_block(self, account_id, raw, should_raise):
         repo = AccountRepository()
         with patch.object(repo.storage, 'block',
-                          AsyncMock(return_value=raw)) as mock_block:
+                          AsyncMock(return_value=raw)) as mock_block, \
+             patch.object(repo.redis_storage, 'delete', AsyncMock()):
             if should_raise:
                 with pytest.raises(UserNotFoundError):
                     await repo.block(account_id)

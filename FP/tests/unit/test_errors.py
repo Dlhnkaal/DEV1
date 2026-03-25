@@ -53,21 +53,24 @@ class TestUserNotFoundError:
     async def test_account_repo_get_by_id_raises_user_not_found(self):
         from repositories.account import AccountRepository
         repo = AccountRepository()
-        with patch.object(repo.storage, 'get_by_id', AsyncMock(return_value=None)):
+        with patch.object(repo.redis_storage, 'get', AsyncMock(return_value=None)), \
+             patch.object(repo.storage, 'get_by_id', AsyncMock(return_value=None)):
             with pytest.raises(UserNotFoundError):
                 await repo.get_by_id(9999)
 
     async def test_account_repo_delete_raises_user_not_found(self):
         from repositories.account import AccountRepository
         repo = AccountRepository()
-        with patch.object(repo.storage, 'delete', AsyncMock(return_value=None)):
+        with patch.object(repo.storage, 'delete', AsyncMock(return_value=None)), \
+             patch.object(repo.redis_storage, 'delete', AsyncMock()):
             with pytest.raises(UserNotFoundError):
                 await repo.delete(9999)
 
     async def test_account_repo_block_raises_user_not_found(self):
         from repositories.account import AccountRepository
         repo = AccountRepository()
-        with patch.object(repo.storage, 'block', AsyncMock(return_value=None)):
+        with patch.object(repo.storage, 'block', AsyncMock(return_value=None)), \
+             patch.object(repo.redis_storage, 'delete', AsyncMock()):
             with pytest.raises(UserNotFoundError):
                 await repo.block(9999)
 
