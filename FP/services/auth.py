@@ -10,12 +10,18 @@ from repositories.account import AccountRepository
 from repositories.auth import AuthRepository
 from errors import UserNotFoundError, UnAuthorizedError, AuthenticationError
 
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
 @dataclass
 class AuthService:
     account_repo: AccountRepository = field(default_factory=AccountRepository)
     auth_repo: AuthRepository = field(default_factory=AuthRepository)
     
-    _SECRET = 'absolute_secret_secret_secret_for_token'
+    _SECRET = os.getenv("_SECRET", "ya_poluchu_10_za_etu_rabotu_7777")
     _USER_TOKEN_TTL = timedelta(days=1)
     _REFRESH_USER_TOKEN_TTL = timedelta(days=7)
 

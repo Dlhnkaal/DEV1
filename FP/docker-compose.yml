@@ -92,6 +92,7 @@ services:
       - REDIS_DB=${REDIS_DB}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - _SECRET=${_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
@@ -118,6 +119,7 @@ services:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DB=${REDIS_DB}
+      - _SECRET=${_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
