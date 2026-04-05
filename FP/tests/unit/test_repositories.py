@@ -69,7 +69,7 @@ class TestAdvertisementRepositoryCache:
 
     async def test_cache_invalidated_on_close(self):
         repo = AdvertisementRepository()
-        with patch.object(repo.storage, 'delete',
+        with patch.object(repo.storage, 'close',
                           AsyncMock(return_value={"id": 1})), \
              patch.object(repo.redis_storage, 'delete',
                           AsyncMock()) as mock_del:
@@ -81,7 +81,7 @@ class TestAdvertisementRepositoryCache:
 
     async def test_cache_not_invalidated_when_not_found(self):
         repo = AdvertisementRepository()
-        with patch.object(repo.storage, 'delete',
+        with patch.object(repo.storage, 'close',
                           AsyncMock(return_value={})), \
              patch.object(repo.redis_storage, 'delete',
                           AsyncMock()) as mock_del:

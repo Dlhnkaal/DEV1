@@ -6,7 +6,6 @@ services:
       - "${REDIS_PORT}:6379"
     volumes:
       - redis_data:/root/redis
-      - ./redis.conf:/usr/local/etc/redis/redis.conf
     environment:
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_DATABASES=${REDIS_DATABASES}
@@ -159,32 +158,32 @@ services:
       - "9090:9090"
 
   grafana:
-      image: grafana/grafana:latest
-      restart: always
-      environment:
-        - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
-      ports:
-        - "3000:3000"
-      volumes:
-        - ./grafana/provisioning:/etc/grafana/provisioning
-        - ./grafana/provisioning/dashboards:/var/lib/grafana/dashboards
-      depends_on:
-        - prometheus
+    image: grafana/grafana:latest
+    restart: always
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/provisioning/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
 
   mlflow:
-      build:
-        context: .
-        dockerfile: Dockerfile.mlflow
-      command: >
-        mlflow server
-        --backend-store-uri sqlite:///mlflow.db
-        --default-artifact-root /mlflow/artifacts
-        --host 0.0.0.0
-        --port 5000
-      ports:
-        - "5000:5000"
-      volumes:
-        - mlflow_data:/mlflow
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow.db
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
 
 volumes:
   postgres_data:

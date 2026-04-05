@@ -1,4 +1,3 @@
-## Я МОГЛА КОГО-ТО НЕ ВЫНУТЬ ИЗ GITIGNORE ПОЖАЛУЙСТА НАПИШИТЕ МНЕ Я ПРИЛОЖУ ВСЕХ КОГО ТУТ НЕТ 
 # Запуск всех сервисов
 ./infra/starting_services.sh ЛИБО ЖЕ docker-compose down, затем docker-compose build --no-cache, затем docker-compose up
 

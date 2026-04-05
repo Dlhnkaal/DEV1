@@ -1,6 +1,7 @@
 import logging
 import json
 import time
+import hashlib
 from datetime import timedelta
 from dataclasses import dataclass, field
 from typing import Optional, List, Mapping, Any, Sequence
@@ -12,10 +13,18 @@ from metrics import DB_QUERY_DURATION
 
 logger = logging.getLogger(__name__)
 
+
+def _hash_password(password: str) -> str:
+    """Hash a plain-text password with SHA-256 before storing."""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
 @dataclass
 class UserPostgresStorage:
     async def create(self, login: str, password: str, email: str, is_verified_seller: bool) -> Mapping[str, Any]:
         logger.info("Creating user name=%s, email=%s", login, email)
+        # Fix #2: hash the password before persisting — never store plain text.
+        hashed = _hash_password(password)
         query = """
         INSERT INTO users (login, password, email, is_verified_seller)
         VALUES ($1, $2, $3, $4)
@@ -24,7 +33,7 @@ class UserPostgresStorage:
         start_time = time.time()
         try:
             async with get_pg_connection() as connection:
-                row = await connection.fetchrow(query, login, password, email, is_verified_seller)
+                row = await connection.fetchrow(query, login, hashed, email, is_verified_seller)
                 return dict(row) if row else None
         finally:
             DB_QUERY_DURATION.labels(query_type="insert").observe(time.time() - start_time)
@@ -62,6 +71,7 @@ class UserPostgresStorage:
         finally:
             DB_QUERY_DURATION.labels(query_type="select").observe(time.time() - start_time)
 
+
 @dataclass
 class UserRedisStorage:
     _TTL: timedelta = timedelta(days=1)
@@ -88,6 +98,7 @@ class UserRedisStorage:
     async def delete(self, user_id: int) -> None:
         async with get_redis_connection() as conn:
             await conn.delete(self._key(user_id))
+
 
 @dataclass
 class UserRepository:

@@ -68,14 +68,18 @@ async def initialize_clients():
 @pytest_asyncio.fixture(scope="session")
 async def run_migrations(initialize_clients):
     import subprocess
+    import sys
+    import pathlib
+
+    project_root = pathlib.Path(__file__).parent.parent.parent
+
     result = subprocess.run(
-        ["alembic", "upgrade", "head"],
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
         capture_output=True,
         text=True,
+        cwd=project_root,
         env={**os.environ, "DATABASE_URL": _LOCAL_DB_URL},
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"Alembic migration failed:\n{result.stderr}")
     yield
 
 

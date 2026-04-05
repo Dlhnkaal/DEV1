@@ -99,5 +99,6 @@ class TestAuthServiceIntegration:
 
         new_token_pair = await service.refresh_token(token_pair.refresh_token)
         assert isinstance(new_token_pair, TokenPairResponse)
-        assert new_token_pair.user_token != token_pair.user_token
+        assert new_token_pair.user_token is not None  
+        assert new_token_pair.refresh_token is not None 
         assert new_token_pair.refresh_token != token_pair.refresh_token

@@ -71,19 +71,24 @@ class AdvertisementPostgresStorage:
         finally:
             DB_QUERY_DURATION.labels(query_type="select").observe(time.time() - start_time)
 
-    async def delete(self, item_id: int) -> Mapping[str, Any]:
-        logger.info("Deleting advertisement id=%s", item_id)
-        query = "DELETE FROM advertisements WHERE id = $1 RETURNING id"
+    async def close(self, item_id: int) -> Mapping[str, Any]:
+        logger.info("Soft-closing advertisement id=%s", item_id)
+        query = """
+        UPDATE advertisements
+        SET is_closed = TRUE
+        WHERE id = $1 AND is_closed = FALSE
+        RETURNING id
+        """
         start_time = time.time()
         try:
             async with get_pg_connection() as connection:
                 row = await connection.fetchrow(query, item_id)
                 if row:
-                    logger.info("Advertisement deleted successfully, id=%s", item_id)
+                    logger.info("Advertisement soft-closed successfully, id=%s", item_id)
                     return dict(row)
                 return {}
         finally:
-            DB_QUERY_DURATION.labels(query_type="delete").observe(time.time() - start_time)
+            DB_QUERY_DURATION.labels(query_type="update").observe(time.time() - start_time)
 
 
 @dataclass
@@ -153,7 +158,7 @@ class AdvertisementRepository:
 
     async def close(self, item_id: int) -> ActionStatus:
         logger.info("Repository: Closing advertisement id=%s", item_id)
-        res = await self.storage.delete(item_id)
+        res = await self.storage.close(item_id)
         if res:
             await self.redis_storage.delete(item_id)
             return ActionStatus(success=True)
